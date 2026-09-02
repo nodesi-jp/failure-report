@@ -106,6 +106,13 @@ Claude Code から使う
   --dir <evidence>               エビデンスの場所（既定 ./evidence、環境変数 EVIDENCE_DIR）
   --runs latest|all|<実行ID>      publish の対象（既定 latest）
   --light                        トレース・動画を含めない（軽くする）
+
+環境変数
+  EVIDENCE_DIR                   保存先（既定 <プロジェクト直下>/evidence）
+  EVIDENCE_RUN_ID                実行 ID（既定 実行時刻。CI ではビルド番号でもよい）
+  EVIDENCE_ENV_NAME              一覧に出す環境名（既定 baseURL のホスト名）
+  EVIDENCE_SHARE                 1 で実行のたびに報告書も作る（reporter の share でも指定できる）
+  FAILURE_REPORT_SESSION         「全部流す → 落ちたものを流し直す」を 1 冊にまとめる名前
 `.trim();
 
 function main() {
