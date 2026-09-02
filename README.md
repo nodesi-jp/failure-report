@@ -5,8 +5,7 @@ Playwright の実行から **Failure Report**（テスト報告書）を作る�
 - テストのそばに「観点・前提・手順・状態」を書いておくと、実行するたびに報告書ができる
 - 報告書は 1 ファイル（`report.html`）で完結する。メールにもチケットにも貼れる。印刷すれば PDF
 - 実行ごとの記録は消さずに積む。過去の「この版はここまで確認済み」を後から出せる
-- CLI で見る・配る（`serve` / `report` / `publish`）
-- MCP サーバとしても動くので、Claude Code から結果を直接引ける
+- CLI で見る・配る。MCP サーバとしても動くので、Claude Code から結果を直接引ける
 
 依存は `@playwright/test` だけ。
 
@@ -30,6 +29,8 @@ Playwright の実行から **Failure Report**（テスト報告書）を作る�
           └ スクリーンショット      要所の画面（shot）。「何をした直後か」がラベルで分かる
 ```
 
+マトリクスの記号をクリックすると、その 1 マスの詳細へ飛ぶ。
+
 結果の言葉は報告書・端末・MCP で揃えている。
 
 | 言葉 | Playwright | 意味 |
@@ -39,10 +40,6 @@ Playwright の実行から **Failure Report**（テスト報告書）を作る�
 | ブロック | skipped | 実行できなかった。「スキップ」とは呼ばない。必ず「実行できない理由」が付く |
 | 対象外 | （収集しない） | そのロールにその画面が無い等。ページは作らず、マトリクスに「·」で出るだけ |
 
-この一覧は `npx failure-report page`（MCP なら `describe_page`）でいつでも出せる。定義は `src/page.ts` の 1 か所。
-
-マトリクスの記号をクリックすると、その 1 マスの詳細へ飛ぶ。
-
 ## 入れかた
 
 ```bash
@@ -51,15 +48,9 @@ npm i -D github:nodesi-jp/failure-report   # GitHub から（npm 公開までの
 npx failure-report init --write --claude --example
 ```
 
-GitHub から入れると `prepare` で `dist/` をその場でビルドする（TypeScript が devDependencies に入っている）。
-
 `init` が `playwright.config.ts` に 3 か所（`outputDir` / `reporter` / `use` の証拠設定）を足す
-（元のファイルは `.bak` に残る）。`--claude` を付けると `CLAUDE.md` に書き方の決めごとも足すので、
-Claude Code が同じ書き方でテストを足せる。
-
-`init --claude` は**何度実行してもよい**。節は `<!-- @nodesi/failure-report:begin -->` 〜 `end` の印で囲ってあり、
-2 回目からは中身を最新の文面に置き換えるだけで増えない。パッケージを上げたらもう一度流す。
-印の外に書いたものは触らない。決めごとの文面は `npx failure-report practices` で見られる。
+（元のファイルは `.bak` に残る）。`--claude` は `CLAUDE.md` に書き方の決めごとを、
+`--example` はお手本 spec を足す。**何度流してもよい**（節は印で囲ってあり、増えずに最新へ置き換わる）。
 
 手で書くならこれだけ:
 
@@ -92,8 +83,7 @@ export default defineConfig({
 正しい形が入っている。ネットワークも認証も要らないので、そのまま流せる。
 
 ```bash
-npx failure-report init --example     # tests/ に写す（testDir を見る）
-npx failure-report example            # 端末に出すだけ
+npx failure-report init --example     # testDir に写す
 npx playwright test failure-report.example
 ```
 
@@ -124,25 +114,14 @@ test('追加した ToDo が一覧に出て、削除すると消える', async ({
 });
 ```
 
-書き忘れは機械的に見つけられる。CI に `lint --strict` を入れれば、観点や手順の無いテストで落とせる。
-
-```bash
-$ npx failure-report lint
-報告書の記述が足りないケース: 3 / 168 件
-
-todo/list.spec.ts
-  ToDo の並び替え › 期限の近い順に並ぶ
-    足りない: 手順
-```
-
 | 関数 | 報告書のどこに出るか | 書き方 |
 |---|---|---|
 | `details({観点, 前提, 参照, 要確認})` | 章立て・マトリクスの行のまとまり・各マスの前提 | `test.describe(名前, details({...}), () => {})` / `test(名前, details({...}), async () => {})`。**実行しなくても `--list` で読める**ので、これが基本 |
 | `viewpoint` / `precondition` / `reference` (testInfo, ...) | 同上 | 実行してみないと決まらないときだけ。静的には読めない |
-| `step(title, body)` | 各マスの「テスト内容」 | **操作と、それで何を確かめたかを 1 文で**。「クリック」「アサート」は書かない |
+| `step(title, body)` | 各マスの「内容」 | **操作と、それで何を確かめたかを 1 文で**。「クリック」「アサート」は書かない |
 | `shot(page, testInfo, label)` | 「スクリーンショット」 | 「何をした直後の画面か」。連番は自動 |
 | `issue(testInfo, ...)` | 報告書の先頭「要確認」 | 通っているが人に見てほしいこと（間欠的に落ちる・仕様が疑わしい） |
-| `note(testInfo, title, text)` | 「テスト結果」の折りたたみ | 数値・チェックサム・API 応答 |
+| `note(testInfo, title, text)` | 「結果」の折りたたみ | 数値・チェックサム・API 応答 |
 | `recordState(testInfo, name, '前'\|'後', data)` | 「DB の状態」 | 状態そのもの（配列・オブジェクト） |
 | `aroundState(testInfo, name, read, body)` | 「DB の状態」の差分表 | 操作の前後を自動で撮る |
 
@@ -152,18 +131,12 @@ todo/list.spec.ts
 - よい: `権限のない画面を直接開いて、データが返らないことを確かめる`
 - わるい: `click upload button` / `assert visible` / `step 1`
 
-### DB の状態
-
 「DB を直接見る口」が無くても、API や画面から取れる一覧を前後で撮れば差分は出せる。
-
-```ts
-await aroundState(testInfo, 'ToDo 一覧', () => readTodos(page), async () => {
-  await addTodo('掃除をする');   // ← この操作の前後が記録される
-});
-```
-
 配列は `id` / `name` などをキーに突き合わせ、**追加・削除・変更**が表になる。
 オブジェクトはフィールドごとに比べる。生データも折りたたみで残る。
+
+書き忘れは `npx failure-report lint` が挙げる（観点・前提・手順・判定・スクショの抜け）。
+CI に `lint --strict` を入れれば落とせる。
 
 ## 出来上がるもの
 
@@ -173,7 +146,7 @@ evidence/
 ├── latest → 2026-08-31_212000    最新へのリンク
 └── 2026-08-31_212000/            実行ごと。上書きしない
     ├── report.html               テスト報告書（1 ファイルで完結、画像埋め込み）
-    ├── run.json                  機械可読の実行記録（環境・結果・観点・手順・添付。中身は開けば分かる）
+    ├── run.json                  機械可読の実行記録（環境・結果・観点・手順・添付）
     ├── report/index.html         Playwright の HTML レポート（トレース閲覧はこちら）
     ├── shots/                    要所のスクリーンショット（連番＋日本語ラベル）
     └── artifacts/                トレース・動画・添付
@@ -181,37 +154,26 @@ evidence/
 
 ## CLI
 
-```bash
-npx failure-report <コマンド>
-```
+`npx failure-report <コマンド>`。全部は `--help` に出る。よく使うのは:
 
 | コマンド | すること |
 |---|---|
-| `init [--write] [--claude] [--example]` | 導入。設定・CLAUDE.md への追記と、お手本 spec の写し。何度流してもよい |
-| `list [-n 20]` | 実行履歴を表で表示 |
-| `matrix [<実行ID>] [--html] [--all-envs]` | 観点 × ロール（環境）のマトリクス。`--all-envs` は環境ごとの最新を並べる |
-| `catalog` | どんなテストがあり何を確かめることになっているかを、実行せずに観点ごとに並べる |
-| `page` | ページ（マトリクスの 1 マス）に載せる項目と、結果の言葉（OK / NG / ブロック / 対象外）の定義 |
-| `practices` | テストを書くときの決めごと（`init --claude` が CLAUDE.md に足す文）を出す |
-| `example` | お手本 spec を出す（報告書の全欄が埋まる 1 本とブロックの形）。`init --example` で testDir に写せる |
-| `lint [<実行ID>] [--strict]` | 観点・前提・手順・判定・スクショが足りないケースと、続けてブロックされたままのテストを挙げる（`--strict` で CI を落とせる） |
-| `report [<実行ID>] [--out f] [--no-images]` | 報告書 `report.html` を作る |
-| `serve [--port 4321] [--host 0.0.0.0] [--open]` | ブラウザで見る。`--host 0.0.0.0` で同じネットワークのチームにも |
-| `publish --to <置き場所> [--runs all] [--light]` | 共有できる場所へ静的サイトとして置く |
+| `report [<実行ID>]` | 報告書 `report.html` を作る（`--no-images` で軽く） |
+| `serve [--host 0.0.0.0] [--open]` | ブラウザで見る |
+| `matrix [--viewpoint <語>] [--all-envs]` | 観点 × ロール（環境）のマトリクスを端末に |
+| `catalog` | どんなテストがあり何を確かめることになっているかを、**実行せずに**並べる |
+| `lint [--strict]` | 記述が足りないケースと、続けてブロックされたままのテスト |
+| `page` / `practices` / `example` | ページの項目の定義 / 書き方の決めごと / お手本 spec |
+| `publish --to <置き場所>` | 共有できる場所へ静的サイトとして置く |
 | `prune --keep 10 [--yes]` | 古い実行を消す（既定は一覧を出すだけ） |
-| `open [<実行ID>]` | Playwright のレポートを開く |
-| `index` | 一覧ページを作り直す |
-| `mcp` | MCP サーバとして動く |
 
-### 配る
+配るとき:
 
 | したいこと | やりかた |
 |---|---|
 | 1 人に渡す | `report` で `report.html` を作って添付（画像込み。印刷で PDF） |
 | チームで見る | `serve --host 0.0.0.0`（その場だけ）|
 | URL で常設 | `publish --to s3://bucket/prefix` / `publish --to gh-pages --push` / `publish --to <共有フォルダ>` |
-
-`--runs all` で全実行、`--light` でトレース・動画を除いて軽くする。
 
 ## Claude Code から使う（MCP）
 
@@ -230,7 +192,7 @@ claude mcp add failure-report -- npx failure-report mcp
 ```
 
 ツールの一覧と使い方・言葉の対応・答え方は、**サーバが自分で AI に伝える**
-（`tools/list` と initialize の `instructions`。文面は `src/page.ts`）。ここに書き写さないので、ずれない。
+（`tools/list` と initialize の `instructions`）。ここに書き写さないので、ずれない。
 
 `get_run` / `get_failures` は報告書のページと同じ項目の順で返す。
 人が `report.html` で見るものと、AI が読むものが一致する。
@@ -248,14 +210,5 @@ claude mcp add failure-report -- npx failure-report mcp
 reporter のオプション: `title` / `share` / `exclude`（報告書に載せないプロジェクト、既定 `['setup']`）/
 `report.{title,purpose,scope,preconditions,author}`。
 
-転送量の「アップロード」判定を変えたいときは `trackTransfer(page, testInfo, { isUpload })` に述語を渡す。
-
-```ts
-export const test = base.extend<{ transferStats: void }>({
-  transferStats: [async ({ page }, use, testInfo) => {
-    const tracker = trackTransfer(page, testInfo);
-    await use();
-    await tracker.finish();
-  }, { auto: true }],
-});
-```
+アップロード / ダウンロードの転送量も記録できる。fixture に `trackTransfer(page, testInfo)` を仕込むと、
+実バイト数が一覧と報告書に出る（判定を変えるなら `{ isUpload }` に述語を渡す）。
