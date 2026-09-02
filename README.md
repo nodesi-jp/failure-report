@@ -229,34 +229,11 @@ claude mcp add failure-report -- npx failure-report mcp
 }
 ```
 
-使えるツール:
+ツールの一覧と使い方・言葉の対応・答え方は、**サーバが自分で AI に伝える**
+（`tools/list` と initialize の `instructions`。文面は `src/page.ts`）。ここに書き写さないので、ずれない。
 
-| ツール | 返すもの |
-|---|---|
-| `list_runs` | 実行履歴（環境・結果・所要・転送量） |
-| `get_run` | 実行 1 件の全ケースを、報告書のページと同じ項目の順で返す |
-| `get_matrix` | 観点 × ロールのマトリクス（`allEnvironments` で環境も） |
-| `get_failures` | NG のケースだけ（落ちた手順・成立しなかった判定・エラー） |
-| `list_tests` | **実行せずに**「どんなテストがあり何を確かめるか」（観点・前提）を返す |
-| `list_gaps` | 記述が足りないケースと、続けてブロックされたままのテスト |
-| `describe_page` | ページ（1 マス）に載せる項目の一覧と意味、結果の言葉の定義 |
-| `get_example` | お手本 spec を丸ごと返す。`instructions` が「書く前にこれを読む」と伝える |
-| `build_share` | Failure Report を作ってパスを返す |
-
-### AI にどう伝わるか
-
-MCP の使い方は **サーバ自身が initialize の `instructions` で返す**（`src/page.ts` の `MCP_INSTRUCTIONS`）。
-Claude Code はこれを毎回「MCP Server Instructions」としてプロンプトに載せるので、
-CLAUDE.md に書かなくても次が伝わる。
-
-- 質問の種類 → 使うツール（落ちたのは → `get_failures`、カバーしているか → `list_tests`、ページの項目 → `describe_page` …）
-- 言葉の対応（passed = OK / failed = NG / skipped = ブロック / 収集しない = 対象外）
-- 答え方（実行 ID と対象を添える。NG は落ちた手順・判定・エラーで言う。ブロックは理由を添える。要確認も一緒に伝える）
-
-`get_run` / `get_failures` の返答は報告書のページと同じ項目の順（お題・前提・内容・判断根拠 / 実行できない理由・結果・要確認・DB の状態・スクリーンショット）で書くので、
-人が report.html で見るものと AI が読むものが一致する。
-
-テストの書き方（`details` / `step` / `shot` …）は `init --claude` が CLAUDE.md に足す節で伝える（実行前のコードを書く場面は MCP ではなく CLAUDE.md の担当）。
+`get_run` / `get_failures` は報告書のページと同じ項目の順で返す。
+人が `report.html` で見るものと、AI が読むものが一致する。
 
 ## 設定
 
