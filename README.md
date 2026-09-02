@@ -1,0 +1,319 @@
+# @nodesi/failure-report
+
+Playwright の実行から **Failure Report**（テスト報告書）を作る部品。
+
+- テストのそばに「観点・前提・手順・状態」を書いておくと、実行するたびに報告書ができる
+- 報告書は 1 ファイル（`report.html`）で完結する。メールにもチケットにも貼れる。印刷すれば PDF
+- 実行ごとの記録は消さずに積む。過去の「この版はここまで確認済み」を後から出せる
+- CLI で見る・配る（`serve` / `report` / `publish`）
+- MCP サーバとしても動くので、Claude Code から結果を直接引ける
+
+依存は `@playwright/test` だけ。
+
+## Failure Report の構造
+
+```
+テスト観点                          何を確かめるのか（details({ 観点 })）
+  └ テストマトリクス                観点ごとに「ケース × ロール（環境）」の表
+      └ ページ（マトリクスの 1 マス = ケース × 対象）
+          ├ お題                    どのケースを、どの対象（ロール / 環境）で流したか
+          ├ 前提                    事前条件・使ったアカウント・用意したデータ（details({ 前提 })）
+          ├ 内容                    手順。操作と、それで何を確かめたかを 1 文ずつ（step）
+          ├ OK / NG と判断した根拠  判定 1 つずつの成否（expect のメッセージ）。poll の空振りは「n 回目で成立」
+          ├ 実行できない理由        ブロックのときだけ。test.skip / test.fixme の理由（必須）
+          ├ 実行の記録              同じセッションで 2 回以上流したときの 1 回目・2 回目…
+          ├ 再実行の結果            この回 NG でも、あとで個別に流して通ったこと
+          ├ 結果                    OK / NG / ブロック・所要時間・エラー本文・メモ（note）
+          ├ 要確認                  通っていても人に見てほしいこと（issue）。報告書の先頭にも集まる
+          ├ 参照                    仕様書・チケットへのリンク（details({ 参照 })）
+          ├ DB の状態               操作前後の差分（増えた・減った・変わった）（aroundState）
+          └ スクリーンショット      要所の画面（shot）。「何をした直後か」がラベルで分かる
+```
+
+結果の言葉は報告書・端末・MCP で揃えている。
+
+| 言葉 | Playwright | 意味 |
+|---|---|---|
+| OK | passed | 判定がすべて成立した |
+| NG | failed / timedOut | 判定が成立しなかった。落ちた手順・判定・エラーが「結果」に出る |
+| ブロック | skipped | 実行できなかった。「スキップ」とは呼ばない。必ず「実行できない理由」が付く |
+| 対象外 | （収集しない） | そのロールにその画面が無い等。ページは作らず、マトリクスに「·」で出るだけ |
+
+この一覧は `npx failure-report page`（MCP なら `describe_page`）でいつでも出せる。定義は `src/page.ts` の 1 か所。
+
+マトリクスの記号をクリックすると、その 1 マスの詳細へ飛ぶ。
+
+## 入れかた
+
+```bash
+npm i -D github:nodesi-jp/failure-report   # GitHub から（npm 公開までの間はこちら）
+# npm i -D @nodesi/failure-report          # npm に公開したらこちら
+npx failure-report init --write --claude --example
+```
+
+GitHub から入れると `prepare` で `dist/` をその場でビルドする（TypeScript が devDependencies に入っている）。
+
+`init` が `playwright.config.ts` に 3 か所（`outputDir` / `reporter` / `use` の証拠設定）を足す
+（元のファイルは `.bak` に残る）。`--claude` を付けると `CLAUDE.md` に書き方の決めごとも足すので、
+Claude Code が同じ書き方でテストを足せる。
+
+`init --claude` は**何度実行してもよい**。節は `<!-- @nodesi/failure-report:begin -->` 〜 `end` の印で囲ってあり、
+2 回目からは中身を最新の文面に置き換えるだけで増えない。パッケージを上げたらもう一度流す。
+印の外に書いたものは触らない。決めごとの文面は `npx failure-report practices` で見られる。
+
+手で書くならこれだけ:
+
+```ts
+import { defineConfig } from '@playwright/test';
+import { paths } from '@nodesi/failure-report/runContext';
+
+export default defineConfig({
+  outputDir: paths.artifacts,                       // 実行ごとのフォルダへ
+  reporter: [
+    ['html', { open: 'never', outputFolder: paths.report }],
+    ['list'],
+    ['@nodesi/failure-report/reporter', {
+      share: true,                                  // 実行のたびに report.html を作る
+      report: {
+        title: '自動テスト報告書',
+        purpose: '何のためのテストか',
+        scope: ['対象機能'],
+        preconditions: ['環境・データ・アカウントの前提'],
+      },
+    }],
+  ],
+  use: { trace: 'on', screenshot: 'on', video: 'retain-on-failure' },
+});
+```
+
+## テストの書き方
+
+観点と前提は **Playwright 標準のアノテーション枠**（`details`）に書く。describe に書けば中の全ケースに付く。
+
+```ts
+import { details, step, shot, note, issue, aroundState } from '@nodesi/failure-report';
+
+test.describe('プロジェクトの作成と削除', details({
+  観点: 'プロジェクト管理: 作成したものが一覧に出て、削除すると消える',
+  前提: 'e2e- で始まるプロジェクトが残っていない状態',
+}), () => {
+
+test('作成したプロジェクトが一覧に出て、削除すると消える', async ({ page }, testInfo) => {
+
+  await aroundState(testInfo, 'プロジェクト一覧', () => listProjects(page), () =>
+    step('プロジェクトを新規作成して、一覧に出ることを確かめる', async () => {
+      await projects.createProject(name);
+      await shot(page, testInfo, '作成直後の一覧');
+      await expect(page.getByRole('link', { name })).toBeVisible();
+    }),
+  );
+
+  await note(testInfo, '照合結果', `find+cksum: ${a} / ${b}`);
+});
+});
+```
+
+書き忘れは機械的に見つけられる。CI に `lint --strict` を入れれば、観点や手順の無いテストで落とせる。
+
+```bash
+$ npx failure-report lint
+報告書の記述が足りないケース: 3 / 168 件
+
+roles/file-move.spec.ts
+  ファイルの移動 › 移動してもファイルの中身は変わらない
+    足りない: 手順
+```
+
+**状態の読み取りは画面を開き直してから。** 一覧は削除直後に楽観的に書き換わることがあり、
+そのまま読むと「前と後が同じ」になる。
+
+| 関数 | 報告書のどこに出るか | 書き方 |
+|---|---|---|
+| `details({観点, 前提, 参照, 要確認})` | 章立て・マトリクスの行のまとまり・各マスの前提 | `test.describe(名前, details({...}), () => {})` / `test(名前, details({...}), async () => {})`。**実行しなくても `--list` で読める**ので、これが基本 |
+| `viewpoint` / `precondition` / `reference` (testInfo, ...) | 同上 | 実行してみないと決まらないときだけ。静的には読めない |
+| `step(title, body)` | 各マスの「テスト内容」 | **操作と、それで何を確かめたかを 1 文で**。「クリック」「アサート」は書かない |
+| `shot(page, testInfo, label)` | 「スクリーンショット」 | 「何をした直後の画面か」。連番は自動 |
+| `issue(testInfo, ...)` | 報告書の先頭「要確認」 | 通っているが人に見てほしいこと（間欠的に落ちる・仕様が疑わしい） |
+| `note(testInfo, title, text)` | 「テスト結果」の折りたたみ | 数値・チェックサム・API 応答 |
+| `recordState(testInfo, name, '前'\|'後', data)` | 「DB の状態」 | 状態そのもの（配列・オブジェクト） |
+| `aroundState(testInfo, name, read, body)` | 「DB の状態」の差分表 | 操作の前後を自動で撮る |
+
+手順名の善し悪しがそのまま報告書の読みやすさになる。
+
+- よい: `ファイルを2つアップロードして、一覧に両方出ることを確かめる`
+- よい: `権限のない画面を直接開いて、データが返らないことを確かめる`
+- わるい: `click upload button` / `assert visible` / `step 1`
+
+### DB の状態
+
+「DB を直接見る口」が無くても、API や画面から取れる一覧を前後で撮れば差分は出せる。
+
+```ts
+await aroundState(testInfo, 'プロジェクト一覧', () => listProjects(page), async () => {
+  await projects.createProject(name);   // ← この操作の前後が記録される
+});
+```
+
+配列は `id` / `name` などをキーに突き合わせ、**追加・削除・変更**が表になる。
+オブジェクトはフィールドごとに比べる。生データも折りたたみで残る。
+
+## 出来上がるもの
+
+```
+evidence/
+├── index.html                    過去の実行の一覧（実行ID・環境・結果・所要・転送量・報告書）
+├── latest → 2026-08-31_212000    最新へのリンク
+└── 2026-08-31_212000/            実行ごと。上書きしない
+    ├── report.html               テスト報告書（1 ファイルで完結、画像埋め込み）
+    ├── run.json                  機械可読の実行記録（下記）
+    ├── report/index.html         Playwright の HTML レポート（トレース閲覧はこちら）
+    ├── shots/                    要所のスクリーンショット（連番＋日本語ラベル）
+    └── artifacts/                トレース・動画・添付
+```
+
+## CLI
+
+```bash
+npx failure-report <コマンド>
+```
+
+| コマンド | すること |
+|---|---|
+| `init [--write] [--claude]` | 導入。設定と CLAUDE.md に追記 |
+| `list [-n 20]` | 実行履歴を表で表示 |
+| `matrix [<実行ID>] [--html] [--all-envs]` | 観点 × ロール（環境）のマトリクス。`--all-envs` は環境ごとの最新を並べる |
+| `catalog` | どんなテストがあり何を確かめることになっているかを、実行せずに観点ごとに並べる |
+| `page` | ページ（マトリクスの 1 マス）に載せる項目と、結果の言葉（OK / NG / ブロック / 対象外）の定義 |
+| `practices` | テストを書くときの決めごと（`init --claude` が CLAUDE.md に足す文）を出す |
+| `example` | お手本 spec を出す（報告書の全欄が埋まる 1 本とブロックの形）。`init --example` で `tests/` に写せる |
+| `lint [<実行ID>] [--strict]` | 観点・前提・手順・スクショが足りないケースを挙げる（`--strict` で CI を落とせる） |
+| `report [<実行ID>] [--out f] [--no-images]` | 報告書 `report.html` を作る |
+| `serve [--port 4321] [--host 0.0.0.0] [--open]` | ブラウザで見る。`--host 0.0.0.0` で同じネットワークのチームにも |
+| `publish --to <置き場所> [--runs all] [--light]` | 共有できる場所へ静的サイトとして置く |
+| `prune --keep 10 [--yes]` | 古い実行を消す（既定は一覧を出すだけ） |
+| `open [<実行ID>]` | Playwright のレポートを開く |
+| `index` | 一覧ページを作り直す |
+| `mcp` | MCP サーバとして動く |
+
+### 配る
+
+| したいこと | やりかた |
+|---|---|
+| 1 人に渡す | `report` で `report.html` を作って添付（画像込み。印刷で PDF） |
+| チームで見る | `serve --host 0.0.0.0`（その場だけ）|
+| URL で常設 | `publish --to s3://bucket/prefix` / `publish --to gh-pages --push` / `publish --to <共有フォルダ>` |
+
+`--runs all` で全実行、`--light` でトレース・動画を除いて軽くする。
+
+## Claude Code から使う（MCP）
+
+MCP サーバは HTTP の API である必要がない。標準入出力で JSON を返すプロセスでよく、これはその形。
+
+```bash
+claude mcp add evidence -- npx failure-report mcp
+```
+
+`.mcp.json` に書くなら:
+
+```json
+{
+  "mcpServers": {
+    "evidence": { "command": "npx", "args": ["failure", "mcp"] }
+  }
+}
+```
+
+使えるツール:
+
+| ツール | 返すもの |
+|---|---|
+| `list_runs` | 実行履歴（環境・結果・所要・転送量） |
+| `get_run` | 実行 1 件の全ケース（手順・結果・スクショの場所） |
+| `get_matrix` | 観点 × ロールのマトリクス（`allEnvironments` で環境も） |
+| `get_failures` | 失敗したケースだけ（落ちた手順とエラー） |
+| `list_tests` | **実行せずに**「どんなテストがあり何を確かめるか」（観点・前提）を返す |
+| `list_gaps` | 記述（観点・前提・手順・スクショ）が足りないケース |
+| `describe_page` | ページ（1 マス）に載せる項目の一覧と意味、結果の言葉の定義 |
+| `get_example` | お手本 spec を丸ごと返す。`instructions` が「書く前にこれを読む」と伝える |
+| `build_share` | Failure Report を作ってパスを返す |
+
+### AI にどう伝わるか
+
+MCP の使い方は **サーバ自身が initialize の `instructions` で返す**（`src/page.ts` の `MCP_INSTRUCTIONS`）。
+Claude Code はこれを毎回「MCP Server Instructions」としてプロンプトに載せるので、
+CLAUDE.md に書かなくても次が伝わる。
+
+- 質問の種類 → 使うツール（落ちたのは → `get_failures`、カバーしているか → `list_tests`、ページの項目 → `describe_page` …）
+- 言葉の対応（passed = OK / failed = NG / skipped = ブロック / 収集しない = 対象外）
+- 答え方（実行 ID と対象を添える。NG は落ちた手順・判定・エラーで言う。ブロックは理由を添える。要確認も一緒に伝える）
+
+`get_run` / `get_failures` の返答は報告書のページと同じ項目の順（お題・前提・内容・判断根拠 / 実行できない理由・結果・要確認・DB の状態・スクリーンショット）で書くので、
+人が report.html で見るものと AI が読むものが一致する。
+
+テストの書き方（`details` / `step` / `shot` …）は `init --claude` が CLAUDE.md に足す節で伝える（実行前のコードを書く場面は MCP ではなく CLAUDE.md の担当）。
+
+「昨日の実行で落ちたのはどれ」「stg と prod で結果が違うケースは」に加え、
+`list_tests` は**テストを流さずに**「この観点のテストはあるか」「何をカバーしているか」に答える
+（`details` で宣言していればカタログとして読めるため）。
+
+## 設定
+
+| 環境変数 | 既定 | 説明 |
+|---|---|---|
+| `EVIDENCE_DIR` | `<プロジェクト直下>/evidence` | 保存先 |
+| `EVIDENCE_RUN_ID` | 実行時刻 | 実行 ID。CI ではビルド番号を入れてもよい |
+| `EVIDENCE_ENV_NAME` | baseURL のホスト名 | 一覧に出す環境名（stg / prod など） |
+| `EVIDENCE_SHARE` | `0` | `1` で実行のたびに報告書も作る（reporter の `share` でも指定できる） |
+
+reporter のオプション: `title` / `share` / `exclude`（報告書に載せないプロジェクト、既定 `['setup']`）/
+`report.{title,purpose,scope,preconditions,author}`。
+
+転送量の「アップロード」判定を変えたいときは `trackTransfer(page, testInfo, { isUpload })` に述語を渡す。
+
+```ts
+export const test = base.extend<{ transferStats: void }>({
+  transferStats: [async ({ page }, use, testInfo) => {
+    const tracker = trackTransfer(page, testInfo);
+    await use();
+    await tracker.finish();
+  }, { auto: true }],
+});
+```
+
+## run.json
+
+機械可読の実行記録。リリースに「この版はここまで確認済み」と添えられる。
+
+```jsonc
+{
+  "runId": "2026-08-31_212000",
+  "environment": { "name": "stg", "baseURL": "https://..." },
+  "startedAt": "...", "endedAt": "...", "durationMs": 331000,
+  "status": "passed",
+  "counts": { "passed": 43, "skipped": 62 },
+  "tool": { "playwright": "1.62.1", "workers": 5, "projects": ["public", "orgAdmin"] },
+  "report": { "title": "...", "purpose": "...", "preconditions": ["..."] },
+  "transfer": { "upload": "898.18 KB", "download": "376.07 KB" },
+  "cases": [
+    {
+      "title": "プロジェクトの作成と削除 › フォルダをアップロードして…",
+      "project": "orgAdmin",
+      "status": "passed",
+      "durationMs": 45231,
+      "steps": [{ "title": "プロジェクトを作って、フォルダごとドロップする", "durationMs": 12000 }],
+      "annotations": ["観点: プロジェクト管理: …", "前提: …"],
+      "attachments": [
+        { "name": "01 アップロードが終わったところ", "contentType": "image/png", "path": "shots/…png" },
+        { "name": "状態 プロジェクト一覧 前", "contentType": "application/json", "body": "[…]" }
+      ]
+    }
+  ]
+}
+```
+
+## 開発
+
+```bash
+npm run build       # dist/ を作る（tsc）
+npm run typecheck
+```
