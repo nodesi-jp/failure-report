@@ -53,11 +53,14 @@ export function listTests(cwd = process.cwd(), exclude: string[] = ['setup']): C
             file: suite.file ?? '',
             title: spec.title ?? '',
             project: t.projectName ?? '',
+            // describe が 1 段しか無いなら章にしない（観点と同じことを言う見出しが増えるだけ）
             path: (declaredPath.length
               ? declaredPath
-              : viewpoints.length
-                ? describes
-                : describes.slice(0, -1)
+              : describes.length < 2
+                ? []
+                : viewpoints.length
+                  ? describes
+                  : describes.slice(0, -1)
             ).slice(0, 2),
             viewpoints,
             preconditions: of('前提'),

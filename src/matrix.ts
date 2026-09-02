@@ -83,7 +83,10 @@ export function classificationOf(c: CaseRecord): string[] {
     .filter(Boolean);
   if (declared.length) return declared.slice(0, MAX_DEPTH);
 
+  // describe が 1 段しか無いなら章にしない。
+  // 観点と同じことを言う見出しが 1 つ増えるだけで、読む側の助けにならない。
   const describes = describesOf(c);
+  if (describes.length < 2) return [];
   const usable = declaredViewpointsOf(c).length ? describes : describes.slice(0, -1);
   return usable.slice(0, MAX_DEPTH);
 }
