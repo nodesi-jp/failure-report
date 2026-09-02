@@ -72,8 +72,7 @@ test.describe('ファイル共有', () => {
 ## 入れかた
 
 ```bash
-npm i -D github:nodesi-jp/failure-report   # GitHub から（npm 公開までの間はこちら）
-# npm i -D @nodesi/failure-report          # npm に公開したらこちら
+npm i -D github:nodesi-jp/failure-report
 npx failure-report init --write --claude --example
 ```
 
