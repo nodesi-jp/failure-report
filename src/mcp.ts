@@ -9,12 +9,9 @@ import { formatCatalog, listTests } from './catalog';
 import { formatDuration, listRuns, resolveRun, type CaseRecord, type RunEntry } from './site';
 
 /**
- * エビデンスを読むための MCP サーバ（stdio / JSON-RPC）。
+ * Failure Report を読むための MCP サーバ（stdio / JSON-RPC、依存なし）。
  *
- * MCP は HTTP の API である必要はない。標準入出力で 1 行 1 JSON を
- * やり取りするだけのプロセスでよく、これはその最小実装（依存なし）。
- *
- *   claude mcp add evidence -- npx failure-report mcp
+ *   claude mcp add failure-report -- npx failure-report mcp
  */
 
 type Req = { jsonrpc: '2.0'; id?: number | string; method: string; params?: any };

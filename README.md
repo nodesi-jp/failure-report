@@ -207,10 +207,8 @@ npx failure-report <コマンド>
 
 ## Claude Code から使う（MCP）
 
-MCP サーバは HTTP の API である必要がない。標準入出力で JSON を返すプロセスでよく、これはその形。
-
 ```bash
-claude mcp add evidence -- npx failure-report mcp
+claude mcp add failure-report -- npx failure-report mcp
 ```
 
 `.mcp.json` に書くなら:
@@ -218,7 +216,7 @@ claude mcp add evidence -- npx failure-report mcp
 ```json
 {
   "mcpServers": {
-    "evidence": { "command": "npx", "args": ["failure", "mcp"] }
+    "failure-report": { "command": "npx", "args": ["failure-report", "mcp"] }
   }
 }
 ```

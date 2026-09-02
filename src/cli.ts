@@ -94,7 +94,7 @@ failure-report — Playwright の実行から Failure Report（テスト報告�
   mcp                            MCP サーバとして動く（Claude Code から結果を引ける）
 
 Claude Code から使う
-  claude mcp add evidence -- npx failure-report mcp
+  claude mcp add failure-report -- npx failure-report mcp
 
 置き場所（publish --to）
   <ディレクトリ>                  そのフォルダへコピーする（共有ドライブなど）
