@@ -72,7 +72,7 @@ npx failure-report catalog       # どんなテストがあるか（実行不要
 npx failure-report lint          # 観点・前提・手順・スクショの抜け
 npx failure-report list          # 実行履歴
 npx failure-report matrix        # 観点 × ロールのマトリクス（端末）
-npx failure-report report        # Failure Report（report.html）を作る
+npx failure-report report        # Failure Report を作る（表紙 + 観点ごとのページ。--single で 1 ファイル）
 npx failure-report serve --open  # ブラウザで見る
 ```
 

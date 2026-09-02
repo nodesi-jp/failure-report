@@ -321,6 +321,8 @@ export function renderMatrixText(matrix: Matrix): string {
 export type MatrixHtmlOptions = {
   /** セルから詳細（同じページ内のアンカー）へリンクする。 */
   link?: boolean;
+  /** 詳細が別ページにあるときの、そのページの URL（`<base>#<anchor>` になる）。 */
+  linkBase?: string;
   /** 観点ごとに表を分ける（既定）。false にすると 1 枚にまとめる。 */
   split?: boolean;
   /** 観点ごとの見出しに付ける番号（"3" なら 3.1, 3.2 …）。 */
@@ -359,7 +361,7 @@ export function renderMatrixTable(
           const mark = MARK[cell.status];
           const inner =
             options.link && cell.id && cell.status !== 'none'
-              ? `<a href="#${cell.id}" title="詳細へ">${mark}</a>`
+              ? `<a href="${options.linkBase ?? ''}#${cell.id}" title="詳細へ">${mark}</a>`
               : mark;
           return `<td class="n cell ${cell.status}">${inner}</td>`;
         })
@@ -476,7 +478,10 @@ export function buildAxisMatrix(runId: string, cases: CaseRecord[]): AxisMatrix 
   return rows.length ? { rowAxis, colAxis, rows, columns, cells } : null;
 }
 
-export function renderAxisMatrixHtml(m: AxisMatrix, options: { link?: boolean } = {}): string {
+export function renderAxisMatrixHtml(
+  m: AxisMatrix,
+  options: { link?: boolean; linkBase?: string } = {},
+): string {
   const head = m.columns.map((c) => `<th class="n">${escapeHtml(c)}</th>`).join('');
   const body = m.rows
     .map((row) => {
@@ -486,7 +491,7 @@ export function renderAxisMatrixHtml(m: AxisMatrix, options: { link?: boolean } 
           const mark = MARK[cell.status];
           const inner =
             options.link && cell.id && cell.status !== 'none'
-              ? `<a href="#${cell.id}" title="詳細へ">${mark}</a>`
+              ? `<a href="${options.linkBase ?? ''}#${cell.id}" title="詳細へ">${mark}</a>`
               : mark;
           return `<td class="n cell ${cell.status}">${inner}</td>`;
         })

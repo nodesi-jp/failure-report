@@ -163,7 +163,7 @@ export const MCP_INSTRUCTIONS = `FailureReport — Playwright の実行結果（
 - 「あるケースの詳細」 → get_run（status で passed / failed / skipped に絞る）
 - 「実行の履歴」「前回との違い」 → list_runs → get_run
 - 「報告書の書き方が足りていないところ」 → list_gaps
-- 「人に渡す 1 ファイル」 → build_share
+- 「人に渡す 1 ファイル」 → build_share（報告書は普段は観点ごとの別ページ。これは 1 ファイルにまとめたもの）
 - 「ページ（1 マス）に何を載せるのか」「項目の意味」 → describe_page
 
 言葉の対応（報告書と同じ語で答えること）:

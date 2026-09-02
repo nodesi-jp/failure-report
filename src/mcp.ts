@@ -224,7 +224,7 @@ function callTool(root: string, name: string, args: any): string {
     case 'get_example':
       return exampleSpec() || 'お手本が見つかりません（templates/example.spec.ts）';
     case 'build_share': {
-      const out = buildReport(root, args.runId, { images: args.images !== false });
+      const out = buildReport(root, args.runId, { single: true, images: args.images !== false });
       return `${out}\n(${(fs.statSync(out).size / 1024 / 1024).toFixed(1)} MB / 1 ファイルで完結)`;
     }
     default:

@@ -69,7 +69,8 @@ failure-report — Playwright の実行から Failure Report（テスト報告�
                                  --example でお手本 spec を tests/ に写す）
   list [-n <件数>]                実行の一覧を表示する
   serve [--port 4321] [--host]   ブラウザで見る（--host 0.0.0.0 で LAN のチームにも見せられる）
-  report [<実行ID>] [--out <file>] Failure Report を 1 ファイルで作る（観点・前提・マトリクス・
+  report [<実行ID>] [--single]    Failure Report を作る（観点ごとに別ページ。--single で 1 ファイル）
+                                 中身は観点・前提・マトリクス・
                                  手順・スクショ・操作前後の状態、印刷して PDF にもできる）
                                  軽くする: --max-mb 8 / --max-images 4 / --no-images
                                  画像の枠は失敗したケースから先に使う
@@ -198,6 +199,7 @@ function cmdReport(args: Args) {
   const root = evidenceRoot(args);
   const runId = (args._ as string[])[0];
   const out = buildReport(root, runId, {
+    single: args.single === true,
     out: args.out ? path.resolve(String(args.out)) : undefined,
     images: args.images !== 'false' && args['no-images'] !== true,
     maxImagesPerCase: args['max-images'] ? Number(args['max-images']) : undefined,
@@ -205,7 +207,16 @@ function cmdReport(args: Args) {
   });
   const size = fs.statSync(out).size;
   console.log(`Failure Report: ${out} (${(size / 1024 / 1024).toFixed(1)} MB)`);
-  console.log('このファイル 1 つで完結しています。そのまま添付して渡せます（印刷で PDF にもできます）。');
+  const pages = path.join(path.dirname(out), 'pages');
+  if (args.single !== true && fs.existsSync(pages)) {
+    console.log(`  観点ごとのページ: ${pages}/ （${fs.readdirSync(pages).length} 枚）`);
+  }
+  console.log(
+    args.single === true
+      ? 'このファイル 1 つで完結しています。そのまま添付して渡せます（印刷で PDF にもできます）。'
+      : '表紙です。観点名やマトリクスの記号から、その観点のページへ移れます。'
+        + '\n1 ファイルにまとめて渡すなら --single。',
+  );
   writeIndex(root);
   if (args.open) openInBrowser(out);
 }

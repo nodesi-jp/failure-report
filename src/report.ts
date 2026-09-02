@@ -8,6 +8,8 @@ import {
   declaredViewpointsOf,
   groupCases,
   numberGroups,
+  type Group,
+  type NumberedGroup,
   renderAxisMatrixHtml,
   renderMatrixHtml,
   renderMatrixTable,
@@ -34,6 +36,11 @@ import {
 export type ReportOptions = {
   /** 出力先。既定は実行フォルダの report.html */
   out?: string;
+  /**
+   * 1 ファイルにまとめる（メールに添付して渡す用）。
+   * 既定は観点ごとに別ページへ分ける（1 枚が軽く、目的の観点だけ開ける）。
+   */
+  single?: boolean;
   /** スクリーンショットを埋め込むか。既定 true（false にすると数十 KB で済む） */
   images?: boolean;
   /** 1 ケースあたりに埋め込むスクリーンショットの上限。既定 12 */
@@ -84,16 +91,36 @@ export function buildReport(root: string, runId?: string, options: ReportOptions
   const failures = classifyFailures(root, id, cases);
   // この実行のあとに個別に流し直して OK になったものを拾う
   const resolved = findResolutions(root, id, cases);
+
+  const head = `<h1>${escapeHtml(title)}</h1>
+<p class="lede">${escapeHtml(meta.environment?.name ?? '')} 環境 ／ ${escapeHtml(formatDate(meta.startedAt))} 実行 ／ セッション ${escapeHtml(session)}${
+    sessionRuns.length > 1 ? `（${sessionRuns.length} 回の実行をまとめています）` : ''
+  }${meta.report?.author ? ` ／ 報告者 ${escapeHtml(meta.report.author)}` : ''}</p>`;
+
+  if (!options.single) {
+    return buildPagedReport({
+      root,
+      id,
+      dir,
+      meta,
+      title,
+      head,
+      cases,
+      matrix,
+      failures,
+      resolved,
+      attempts,
+      dirOf,
+      state,
+      out: options.out,
+    });
+  }
+
   const html = `<!doctype html><html lang="ja"><meta charset="utf-8">
 <title>${escapeHtml(title)} ${escapeHtml(id)}</title>
 <style>${STYLE}${PRINT_STYLE}</style>
 <div class="wrap">
-<h1>${escapeHtml(title)}</h1>
-<p class="lede">${escapeHtml(meta.environment?.name ?? '')} 環境 ／ ${escapeHtml(formatDate(meta.startedAt))} 実行 ／ セッション ${escapeHtml(session)}${
-    sessionRuns.length > 1 ? `（${sessionRuns.length} 回の実行をまとめています）` : ''
-  }${
-    meta.report?.author ? ` ／ 報告者 ${escapeHtml(meta.report.author)}` : ''
-  }</p>
+${head}
 ${renderSummary(meta, failures, resolved, cases)}
 ${renderFailures(id, failures, resolved)}
 ${renderIssues(id, cases)}
@@ -114,6 +141,129 @@ ${renderDetails(id, dir, matrix, cases, state, resolved, attempts, dirOf)}
   fs.writeFileSync(out, html);
   if (state.budget.skipped) {
     console.warn(`画像 ${state.budget.skipped} 枚は容量の上限を超えたため省きました（--no-images で全部省けます）`);
+  }
+  return out;
+}
+
+/** 別ページに分けた報告書の置き場所（実行フォルダの中）。 */
+const PAGES_DIR = 'pages';
+
+/** ファイル名にする。日本語はそのまま残す（読めるファイル名の方が探しやすい）。 */
+function slugify(text: string): string {
+  return text
+    .replace(/[\\/:*?"<>|#%\s]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 40);
+}
+
+/**
+ * 観点ごとに別ページへ分けた報告書を書く。
+ *
+ * - `report.html`  … 表紙。概要・要確認・前提・観点の一覧・マトリクス。
+ *                    観点やマトリクスの記号を押すと、その観点のページへ移る
+ * - `pages/*.html` … 観点 1 つ分。マトリクス 1 枚と、その中のページ（ケース × 対象）の詳細
+ *
+ * 1 枚が軽くなるので、見たい観点だけ開ける。1 ファイルで渡したいときは single を使う。
+ */
+function buildPagedReport(a: {
+  root: string;
+  id: string;
+  dir: string;
+  meta: RunMeta;
+  title: string;
+  head: string;
+  cases: CaseRecord[];
+  matrix: Matrix;
+  failures: Failure[];
+  resolved: Map<string, Resolution>;
+  attempts: Map<string, Array<{ runId: string; status: string }>>;
+  dirOf: (anchor: string) => string;
+  state: RenderState;
+  out?: string;
+}): string {
+  const out = a.out ?? path.join(a.dir, 'report.html');
+  const base = path.dirname(out);
+  const pagesDir = path.join(base, PAGES_DIR);
+  fs.mkdirSync(pagesDir, { recursive: true });
+
+  const groups = numberGroups(groupCases(a.matrix), '4');
+  const names = new Map<string, string>();
+  const used = new Set<string>();
+  for (const g of groups) {
+    const key = [...g.group.path, g.group.viewpoint].join('\u0000');
+    let name = slugify([...g.group.path, g.group.viewpoint].join('-')) || 'group';
+    let n = 2;
+    while (used.has(name)) name = `${name}-${n++}`;
+    used.add(name);
+    names.set(key, name);
+  }
+  const keyOf = (g: Group) => [...g.path, g.viewpoint].join('\u0000');
+  // 日本語のファイル名をそのまま href に置くと環境で解釈が割れるので、URL としては符号化する
+  const hrefOf = (g: Group) => `${PAGES_DIR}/${encodeURIComponent(`${names.get(keyOf(g))}.html`)}`;
+
+  const page = (title: string, body: string) => `<!doctype html><html lang="ja"><meta charset="utf-8">
+<title>${escapeHtml(title)}</title>
+<style>${STYLE}${PRINT_STYLE}</style>
+<div class="wrap">
+${body}
+</div></html>`;
+
+  // 表紙
+  const index = page(
+    `${a.title} ${a.id}`,
+    `${a.head}
+${renderSummary(a.meta, a.failures, a.resolved, a.cases)}
+${renderFailures(a.id, a.failures, a.resolved)}
+${renderIssues(a.id, a.cases)}
+<h2>1. テスト前提</h2>
+${renderPreconditions(a.meta, a.cases)}
+<h2>2. テスト観点</h2>
+${renderViewpoints(a.cases, hrefOf)}
+<h2>3. テストマトリクス</h2>
+${renderMatrices(a.id, a.matrix, a.cases, hrefOf) || '<p class="lede">ケースがありません</p>'}
+<p class="lede" style="margin-top:32px">観点ごとにページを分けています（記号や観点名から開けます）。
+1 ファイルにまとめたいときは <code>failure-report report --single</code>。
+操作の記録（トレース）と動画は実行フォルダ <code>${escapeHtml(a.id)}/</code> にあります。</p>`,
+  );
+  fs.writeFileSync(out, index);
+
+  // 観点ごとのページ
+  groups.forEach((g, i) => {
+    const { path: where, viewpoint, rows } = g.group;
+    const crumb = [...where, viewpoint].map((t) => escapeHtml(t)).join(' <span class="muted">›</span> ');
+    const prev = groups[i - 1];
+    const next = groups[i + 1];
+    const nav = `<p class="lede">${
+      prev
+        ? `<a href="${encodeURIComponent(`${names.get(keyOf(prev.group))}.html`)}">← ${escapeHtml(prev.group.viewpoint)}</a>　`
+        : ''
+    }<a href="../${encodeURIComponent(path.basename(out))}">報告書の表紙</a>${
+      next
+        ? `　<a href="${encodeURIComponent(`${names.get(keyOf(next.group))}.html`)}">${escapeHtml(next.group.viewpoint)} →</a>`
+        : ''
+    }</p>`;
+    // 画像の枠はページごとに使い切ってよい（1 ファイルではないので）
+    const state: RenderState = { ...a.state, budget: { ...a.state.budget } };
+    const body = `<h1>${crumb}</h1>
+<p class="lede">${escapeHtml(a.title)} ／ ${escapeHtml(a.meta.environment?.name ?? '')} 環境 ／ ${escapeHtml(
+      formatDate(a.meta.startedAt),
+    )} 実行</p>
+${nav}
+<h2>マトリクス <span class="muted">（${rows.length} ケース）</span></h2>
+${renderMatrixTable(a.matrix.columns, rows, { link: true })}
+<h2>ページごとの詳細</h2>
+${renderDetails(a.id, a.dir, a.matrix, a.cases, state, a.resolved, a.attempts, a.dirOf, [g])}
+${nav}`;
+    fs.writeFileSync(
+      path.join(pagesDir, `${names.get(keyOf(g.group))}.html`),
+      page(`${[...where, viewpoint].join(' › ')} ／ ${a.title}`, body),
+    );
+    if (state.budget.skipped) a.state.budget.skipped += state.budget.skipped;
+  });
+
+  if (a.state.budget.skipped) {
+    console.warn(`画像 ${a.state.budget.skipped} 枚は容量の上限を超えたため省きました`);
   }
   return out;
 }
@@ -355,7 +505,11 @@ function list(items: string[]): string {
 
 /* -------------------------------------------------------------- テスト観点 */
 
-function renderViewpoints(cases: CaseRecord[]): string {
+function renderViewpoints(
+  cases: CaseRecord[],
+  /** 観点ごとのページ（別ページに分けるとき） */
+  pageOf?: (group: Group) => string,
+): string {
   const groups = new Map<string, { path: string[]; point: string; cases: CaseRecord[]; declared: boolean }>();
   for (const c of cases) {
     const declared = declaredViewpointsOf(c).length > 0;
@@ -384,8 +538,12 @@ function renderViewpoints(cases: CaseRecord[]): string {
       const passed = g.cases.filter((c) => c.status === 'passed').length;
       const failed = g.cases.filter((c) => c.status === 'failed' || c.status === 'timedOut').length;
       const skipped = g.cases.filter((c) => c.status === 'skipped').length;
+      const href = pageOf?.({ path: g.path, viewpoint: point, rows: [] });
+      const label = href
+        ? `<a href="${href}">${escapeHtml(point)}</a>`
+        : escapeHtml(point);
       return `${heading}<tr>
-      <td>${g.path.length ? '<span class="muted">└ </span>' : ''}${escapeHtml(point)}${g.declared ? '' : ' <span class="muted">(describe 名)</span>'}</td>
+      <td>${g.path.length ? '<span class="muted">└ </span>' : ''}${label}${g.declared ? '' : ' <span class="muted">(describe 名)</span>'}</td>
       <td class="n">${g.cases.length}</td>
       <td class="n">${passed}</td>
       <td class="n ${failed ? 'ng' : 'muted'}">${failed}</td>
@@ -409,7 +567,13 @@ ${rows}</table>${hint}`;
  * テストが軸を宣言していれば（`details({ 軸: { 対象: 'フォルダ' } })`）、
  * その観点に合った表（対象 × 操作 など）も一緒に出す。
  */
-function renderMatrices(runId: string, matrix: Matrix, cases: CaseRecord[]): string {
+function renderMatrices(
+  runId: string,
+  matrix: Matrix,
+  cases: CaseRecord[],
+  /** 観点のまとまりごとのページ（別ページに分けるとき）。省略すると同じページ内のアンカーへ */
+  pageOf?: (group: Group) => string,
+): string {
   const byViewpoint = new Map<string, CaseRecord[]>();
   for (const c of cases) {
     for (const v of viewpointsOf(c)) byViewpoint.set(v, [...(byViewpoint.get(v) ?? []), c]);
@@ -418,18 +582,20 @@ function renderMatrices(runId: string, matrix: Matrix, cases: CaseRecord[]): str
   return numberGroups(groupCases(matrix), '3')
     .map(({ group, no, headings }) => {
       const { viewpoint, rows, path } = group;
+      const base = pageOf?.(group) ?? '';
       const axis = buildAxisMatrix(runId, byViewpoint.get(viewpoint) ?? []);
       const extra = axis
-        ? `<p class="where">${escapeHtml(axis.rowAxis)} × ${escapeHtml(axis.colAxis)}（テストが宣言した軸。· は未実施）</p>${renderAxisMatrixHtml(axis, { link: true })}`
+        ? `<p class="where">${escapeHtml(axis.rowAxis)} × ${escapeHtml(axis.colAxis)}（テストが宣言した軸。· は未実施）</p>${renderAxisMatrixHtml(axis, { link: true, linkBase: base })}`
         : '';
       const tag = (level: number) => `h${Math.min(6, level + 2)}`;
       const vp = tag(path.length + 1);
+      const jump = base ? ` <a class="jump" href="${base}">このページを開く →</a>` : '';
       return `${headings
         .map((h) => `<${tag(h.level)}>${h.no} ${escapeHtml(h.title)}</${tag(h.level)}>`)
         .join('\n')}<div class="matrix page">
-<${vp}>${no} 観点: ${escapeHtml(viewpoint)} <span class="muted">（${rows.length} ケース）</span></${vp}>
+<${vp}>${no} 観点: ${escapeHtml(viewpoint)} <span class="muted">（${rows.length} ケース）</span>${jump}</${vp}>
 ${extra}
-${renderMatrixTable(matrix.columns, rows, { link: true })}
+${renderMatrixTable(matrix.columns, rows, { link: true, linkBase: base })}
 </div>`;
     })
     .join('\n') + `<p class="lede">✅ OK　❌ NG　⏱ タイムアウト　– ブロック（実行できず。理由は詳細に）　· 対象外　／ 記号をクリックするとそのケースの詳細へ飛びます</p>`;
@@ -452,16 +618,27 @@ function renderDetails(
   resolved: Map<string, Resolution>,
   attempts: Map<string, Array<{ runId: string; status: string }>>,
   dirOf: (anchor: string) => string,
+  /** 描くまとまり。省略すると全部（1 ファイルの報告書） */
+  only?: NumberedGroup[],
 ): string {
   const byAnchor = new Map(cases.map((c) => [caseAnchor(runId, c.project, c.title), c]));
-  const groups = numberGroups(groupCases(matrix), '4');
+  const groups = only ?? numberGroups(groupCases(matrix), '4');
   if (!groups.length) return '<p class="lede">ケースがありません</p>';
+
+  // このページに出るケースだけ画像を用意する（別ページに分けると 1 枚ずつが軽くなる）
+  const here = new Set(
+    groups.flatMap((g) =>
+      g.group.rows.flatMap((row) => matrix.columns.map((c) => row.cells[c]?.id).filter(Boolean)),
+    ) as string[],
+  );
 
   // 画像の枠は限りがあるので、失敗したケースから先に確保する
   const shots = new Map<string, string>();
   if (state.images) {
     const weight = (c: CaseRecord) => (c.status === 'passed' || c.status === 'skipped' ? 1 : 0);
-    for (const [anchor, c] of [...byAnchor.entries()].sort((a, b) => weight(a[1]) - weight(b[1]))) {
+    for (const [anchor, c] of [...byAnchor.entries()]
+      .filter(([anchor]) => here.has(anchor))
+      .sort((a, b) => weight(a[1]) - weight(b[1]))) {
       const attachments = (c.attachments ?? []).map((a) =>
         typeof a === 'string' ? { name: a, contentType: '' } : a,
       );
