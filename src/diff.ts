@@ -109,7 +109,7 @@ export function renderStateHtml(diff: StateDiff): string {
     : '<tr><td colspan="3" class="muted">変化なし</td></tr>';
 
   return `<div class="state">
-<h4>操作前後の状態: ${escapeHtml(diff.name)} ${counts}</h4>
+<p class="statehead"><b>操作前後の状態: ${escapeHtml(diff.name)}</b> ${counts}</p>
 <table><tr><th>差分</th><th>対象</th><th>内容</th></tr>${rows}</table>
 <details><summary>取得した生データ</summary><pre>前:
 ${escapeHtml(JSON.stringify(diff.before, null, 2).slice(0, 8000))}

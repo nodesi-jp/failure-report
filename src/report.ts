@@ -4,8 +4,10 @@ import {
   buildAxisMatrix,
   buildMatrix,
   caseAnchor,
+  classificationOf,
   declaredViewpointsOf,
-  groupByViewpoint,
+  groupCases,
+  numberGroups,
   renderAxisMatrixHtml,
   renderMatrixHtml,
   renderMatrixTable,
@@ -354,26 +356,36 @@ function list(items: string[]): string {
 /* -------------------------------------------------------------- テスト観点 */
 
 function renderViewpoints(cases: CaseRecord[]): string {
-  const groups = new Map<string, { cases: CaseRecord[]; declared: boolean }>();
+  const groups = new Map<string, { path: string[]; point: string; cases: CaseRecord[]; declared: boolean }>();
   for (const c of cases) {
     const declared = declaredViewpointsOf(c).length > 0;
+    const path = classificationOf(c);
     for (const p of viewpointsOf(c)) {
-      const g = groups.get(p) ?? { cases: [], declared };
+      const key = [...path, p].join('\u0000');
+      const g = groups.get(key) ?? { path, point: p, cases: [], declared };
       g.cases.push(c);
       g.declared = g.declared || declared;
-      groups.set(p, g);
+      groups.set(key, g);
     }
   }
   if (!groups.size) return '<p class="lede">ケースがありません</p>';
 
-  const rows = [...groups.entries()]
-    .sort(([a], [b]) => a.localeCompare(b, 'ja'))
-    .map(([point, g]) => {
+  let shown = '';
+  const rows = [...groups.values()]
+    .sort((a, b) => [...a.path, a.point].join(' > ').localeCompare([...b.path, b.point].join(' > '), 'ja'))
+    .map((g) => {
+      const point = g.point;
+      const head = g.path.join(' > ');
+      const heading =
+        head && head !== shown
+          ? `<tr class="group"><th colspan="5">${escapeHtml(head)}</th></tr>`
+          : '';
+      shown = head;
       const passed = g.cases.filter((c) => c.status === 'passed').length;
       const failed = g.cases.filter((c) => c.status === 'failed' || c.status === 'timedOut').length;
       const skipped = g.cases.filter((c) => c.status === 'skipped').length;
-      return `<tr>
-      <td>${escapeHtml(point)}${g.declared ? '' : ' <span class="muted">(describe 名)</span>'}</td>
+      return `${heading}<tr>
+      <td>${g.path.length ? '<span class="muted">└ </span>' : ''}${escapeHtml(point)}${g.declared ? '' : ' <span class="muted">(describe 名)</span>'}</td>
       <td class="n">${g.cases.length}</td>
       <td class="n">${passed}</td>
       <td class="n ${failed ? 'ng' : 'muted'}">${failed}</td>
@@ -387,7 +399,7 @@ function renderViewpoints(cases: CaseRecord[]): string {
     ? '<p class="lede">(describe 名) と付いた行は、テスト側で観点を宣言していないため describe の名前でまとめています。' +
       'そのテストで確かめたいことを明示するなら <code>viewpoint(testInfo, &#39;...&#39;)</code> を呼びます。</p>'
     : '';
-  return `<table><tr><th>観点</th><th class="n">ケース</th><th class="n">OK</th><th class="n">NG</th><th class="n">ブロック</th></tr>
+  return `<table><tr><th>分類 / 観点</th><th class="n">ケース</th><th class="n">OK</th><th class="n">NG</th><th class="n">ブロック</th></tr>
 ${rows}</table>${hint}`;
 }
 
@@ -403,14 +415,19 @@ function renderMatrices(runId: string, matrix: Matrix, cases: CaseRecord[]): str
     for (const v of viewpointsOf(c)) byViewpoint.set(v, [...(byViewpoint.get(v) ?? []), c]);
   }
 
-  return groupByViewpoint(matrix)
-    .map(({ viewpoint, rows }, i) => {
+  return numberGroups(groupCases(matrix), '3')
+    .map(({ group, no, headings }) => {
+      const { viewpoint, rows, path } = group;
       const axis = buildAxisMatrix(runId, byViewpoint.get(viewpoint) ?? []);
       const extra = axis
         ? `<p class="where">${escapeHtml(axis.rowAxis)} × ${escapeHtml(axis.colAxis)}（テストが宣言した軸。· は未実施）</p>${renderAxisMatrixHtml(axis, { link: true })}`
         : '';
-      return `<div class="matrix page">
-<h3>3.${i + 1} 観点: ${escapeHtml(viewpoint)} <span class="muted">（${rows.length} ケース）</span></h3>
+      const tag = (level: number) => `h${Math.min(6, level + 2)}`;
+      const vp = tag(path.length + 1);
+      return `${headings
+        .map((h) => `<${tag(h.level)}>${h.no} ${escapeHtml(h.title)}</${tag(h.level)}>`)
+        .join('\n')}<div class="matrix page">
+<${vp}>${no} 観点: ${escapeHtml(viewpoint)} <span class="muted">（${rows.length} ケース）</span></${vp}>
 ${extra}
 ${renderMatrixTable(matrix.columns, rows, { link: true })}
 </div>`;
@@ -437,7 +454,7 @@ function renderDetails(
   dirOf: (anchor: string) => string,
 ): string {
   const byAnchor = new Map(cases.map((c) => [caseAnchor(runId, c.project, c.title), c]));
-  const groups = groupByViewpoint(matrix);
+  const groups = numberGroups(groupCases(matrix), '4');
   if (!groups.length) return '<p class="lede">ケースがありません</p>';
 
   // 画像の枠は限りがあるので、失敗したケースから先に確保する
@@ -454,7 +471,8 @@ function renderDetails(
   }
 
   return groups
-    .map(({ viewpoint, rows }, gi) => {
+    .map(({ group, no, headings }) => {
+      const { viewpoint, rows, path } = group;
       let n = 0;
       const blocks = rows
         .flatMap((row) =>
@@ -465,7 +483,7 @@ function renderDetails(
             return c
               ? [
                   renderCase(
-                    `4.${gi + 1}.${++n}`,
+                    `${no}.${++n}`,
                     cell.id,
                     column,
                     dirOf(cell.id),
@@ -474,13 +492,18 @@ function renderDetails(
                     cases,
                     resolved.get(cell.id),
                     attempts.get(cell.id),
+                    Math.min(6, path.length + 4),
                   ),
                 ]
               : [];
           }),
         )
         .join('\n');
-      return `<h3>4.${gi + 1} 観点: ${escapeHtml(viewpoint)} <span class="muted">（${n} 件）</span></h3>${blocks}`;
+      const tag = (level: number) => `h${Math.min(6, level + 2)}`;
+      const vp = tag(path.length + 1);
+      return `${headings
+        .map((h) => `<${tag(h.level)}>${h.no} ${escapeHtml(h.title)}</${tag(h.level)}>`)
+        .join('\n')}<${vp}>${no} 観点: ${escapeHtml(viewpoint)} <span class="muted">（${n} 件）</span></${vp}>${blocks}`;
     })
     .join('\n');
 }
@@ -495,6 +518,8 @@ function renderCase(
   siblings?: CaseRecord[],
   resolution?: Resolution,
   tries?: Array<{ runId: string; status: string }>,
+  /** 見出しの深さ（章立ての一番下の 1 つ下）。既定 h4 */
+  level = 4,
 ): string {
   const status = STATUS_LABEL[c.status] ?? c.status;
   const cls = c.status === 'passed' ? 'ok' : c.status === 'skipped' ? 'muted' : 'ng';
@@ -543,7 +568,12 @@ function renderCase(
     renderNotes(dir, attachments);
 
   const rows: Array<[string, string]> = [
-    ['お題', `${escapeHtml(c.title)}<div class="muted">対象: ${escapeHtml(column)}</div>`],
+    [
+      'お題',
+      `${escapeHtml(c.title)}<div class="muted">${
+        classificationOf(c).length ? `分類: ${escapeHtml(classificationOf(c).join(' > '))}　／　` : ''
+      }対象: ${escapeHtml(column)}</div>`,
+    ],
     ['前提', preconditions.length ? list(preconditions) : '<span class="muted">宣言なし</span>'],
     ['内容', steps],
   ];
@@ -600,8 +630,8 @@ function renderCase(
   if (shots) rows.push(['スクリーンショット', shots]);
 
   return `<div class="case" id="${anchor}">
-  <h4>${no} <span class="${cls}">${status}</span> ${escapeHtml(c.title)}
-    <a class="caseid" href="#${anchor}" title="実行が変わっても変わらない ID">${anchor}</a></h4>
+  <h${level}>${no} <span class="${cls}">${status}</span> ${escapeHtml(c.title.split(' › ').at(-1) ?? c.title)}
+    <a class="caseid" href="#${anchor}" title="実行が変わっても変わらない ID">${anchor}</a></h${level}>
   <table class="kv">${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('')}</table>
 </div>`;
 }

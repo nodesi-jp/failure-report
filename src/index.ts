@@ -39,4 +39,13 @@ export {
 } from './page';
 export { findGaps, formatGaps, type Gap } from './lint';
 export { diffState, renderStateHtml, type StateDiff } from './diff';
-export { buildMatrix, renderMatrixHtml, renderMatrixText, type Matrix } from './matrix';
+export {
+  buildMatrix,
+  classificationOf,
+  groupCases,
+  numberGroups,
+  renderMatrixHtml,
+  renderMatrixText,
+  type Group,
+  type Matrix,
+} from './matrix';

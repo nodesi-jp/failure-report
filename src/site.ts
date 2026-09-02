@@ -157,6 +157,8 @@ export const STYLE = `
  .matrix th.n{vertical-align:bottom}
  .matrix tbody tr:nth-child(even) td,.matrix tr:nth-child(even) td{background:color-mix(in srgb,var(--card) 60%,transparent)}
  .matrix td.cell{font-size:15px}
+ .statehead{margin:10px 0 4px}
+ tr.group th{background:var(--soft,#f2f2f0);font-weight:600;text-align:left;padding-top:12px}
  .matrix td.cell a{text-decoration:none}
  .matrix tr.foot td{border-top:1px solid var(--rule);font-size:12px;background:none}
  .matrix td.failed,.matrix td.timedOut{background:color-mix(in srgb,var(--ng) 14%,transparent)}

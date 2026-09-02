@@ -4,6 +4,7 @@ import readline from 'node:readline';
 import { availableAxes, buildMatrix, pivot, renderAxisMatrixText, renderMatrixText } from './matrix';
 import { buildReport, describeCheck, foldChecks } from './report';
 import { MCP_INSTRUCTIONS, STATUS_LABEL, exampleSpec, formatPageSpec } from './page';
+import { classificationOf } from './matrix';
 import { formatGaps, formatStaleSkips } from './lint';
 import { formatCatalog, listTests } from './catalog';
 import { formatDuration, listRuns, resolveRun, type CaseRecord, type RunEntry } from './site';
@@ -277,7 +278,10 @@ function describeCase(dir: string, c: CaseRecord): string {
     for (const b of body) lines.push(`    ${b.replace(/\n/g, '\n    ')}`);
   };
 
-  row('お題', [`${c.title.split(' › ').at(-1) ?? c.title}（対象: ${c.project}）`]);
+  const group = classificationOf(c);
+  row('お題', [
+    `${c.title.split(' › ').at(-1) ?? c.title}（対象: ${c.project}${group.length ? ` / 分類: ${group.join(' > ')}` : ''}）`,
+  ]);
   row('前提', ann('前提'));
 
   const steps = c.steps.filter((s) => (s.kind ?? 'step') === 'step');

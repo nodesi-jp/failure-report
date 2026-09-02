@@ -13,6 +13,8 @@ export type MatrixRow = {
   title: string;
   /** このケースが確かめている観点。宣言が無ければ空。 */
   viewpoints: string[];
+  /** 章立て（機能 > 画面）。宣言も describe の入れ子も無ければ空。 */
+  path: string[];
   cells: Record<string, Cell>;
 };
 
@@ -56,10 +58,40 @@ export function declaredViewpointsOf(c: CaseRecord): string[] {
     .filter(Boolean);
 }
 
+/** テスト名から describe の入れ子を取り出す（先頭はファイル、末尾はケース名）。 */
+function describesOf(c: CaseRecord): string[] {
+  return c.title.split(' › ').slice(1, -1);
+}
+
+/** 章立てに使える深さ。機能 > 画面 の 2 層まで。 */
+export const MAX_DEPTH = 2;
+
 /**
- * 報告書のまとまりに使う観点。
+ * 報告書の章立て（機能 > 画面）。
  *
- * viewpoint() で宣言していれば それ。宣言が無ければ describe の名前を代わりに使う
+ * `details({ 分類: ['ファイル共有', '受信一覧'] })` で宣言していればそれ。
+ * 宣言が無ければ describe の入れ子を上から使う。
+ * 観点も宣言していないときは、一番内側の describe を観点に回すので、
+ * `describe('ファイル共有', () => describe('受信一覧', () => describe('権限', ...)))` が
+ * そのまま「機能 > 画面 > 観点」になる。
+ */
+export function classificationOf(c: CaseRecord): string[] {
+  const declared = (c.annotations ?? [])
+    .filter((a) => a.startsWith('分類: '))
+    .flatMap((a) => a.slice(4).split('>'))
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (declared.length) return declared.slice(0, MAX_DEPTH);
+
+  const describes = describesOf(c);
+  const usable = declaredViewpointsOf(c).length ? describes : describes.slice(0, -1);
+  return usable.slice(0, MAX_DEPTH);
+}
+
+/**
+ * 報告書のまとまりに使う観点（章立ての一番下）。
+ *
+ * viewpoint() で宣言していれば それ。宣言が無ければ一番内側の describe を代わりに使う
  * （「ファイル操作」「API を直接叩いたときのガード」など、既に意味のある単位になっているため）。
  * describe も無ければファイル名。
  */
@@ -67,8 +99,7 @@ export function viewpointsOf(c: CaseRecord): string[] {
   const declared = declaredViewpointsOf(c);
   if (declared.length) return declared;
   const parts = c.title.split(' › ');
-  const middle = parts.slice(1, -1).join(' › ');
-  return [middle || parts[0] || NO_VIEWPOINT];
+  return [describesOf(c).at(-1) || parts[0] || NO_VIEWPOINT];
 }
 
 /**
@@ -88,7 +119,7 @@ export function buildMatrix(runs: RunEntry[]): Matrix {
       const column = multiEnv ? `${meta.environment?.name ?? '?'} / ${c.project}` : c.project;
       if (!columns.includes(column)) columns.push(column);
 
-      const row = rows.get(c.title) ?? { title: c.title, viewpoints: [], cells: {} };
+      const row = rows.get(c.title) ?? { title: c.title, viewpoints: [], path: classificationOf(c), cells: {} };
       for (const v of viewpointsOf(c)) if (!row.viewpoints.includes(v)) row.viewpoints.push(v);
 
       const current = row.cells[column]?.status;
@@ -110,17 +141,97 @@ export function buildMatrix(runs: RunEntry[]): Matrix {
   return { columns, rows: list, totals };
 }
 
-/** 観点ごとに行をまとめる（観点が複数あるケースは両方に出る）。 */
-export function groupByViewpoint(matrix: Matrix): Array<{ viewpoint: string; rows: MatrixRow[] }> {
-  const groups = new Map<string, MatrixRow[]>();
+export type Group = {
+  /** 章立て（機能 > 画面）。空なら分類なし */
+  path: string[];
+  viewpoint: string;
+  rows: MatrixRow[];
+};
+
+/**
+ * 「分類（機能 > 画面）→ 観点」の順に行をまとめる。
+ * 観点が複数あるケースは両方のまとまりに出る。並びは分類 → 観点。
+ */
+export function groupCases(matrix: Matrix): Group[] {
+  const groups = new Map<string, Group>();
   for (const row of matrix.rows) {
     for (const v of row.viewpoints.length ? row.viewpoints : [NO_VIEWPOINT]) {
-      groups.set(v, [...(groups.get(v) ?? []), row]);
+      const key = [...row.path, v].join('\u0000');
+      const g = groups.get(key) ?? { path: row.path, viewpoint: v, rows: [] };
+      g.rows.push(row);
+      groups.set(key, g);
     }
   }
-  return [...groups.entries()]
-    .sort(([a], [b]) => (a === NO_VIEWPOINT ? 1 : b === NO_VIEWPOINT ? -1 : a.localeCompare(b, 'ja')))
-    .map(([viewpoint, rows]) => ({ viewpoint, rows }));
+  const order = (g: Group) => [...g.path, g.viewpoint];
+  return [...groups.values()].sort((a, b) => {
+    const x = order(a);
+    const y = order(b);
+    for (let i = 0; i < Math.max(x.length, y.length); i++) {
+      const l = x[i] ?? '';
+      const r = y[i] ?? '';
+      if (l === r) continue;
+      // 「観点の宣言なし」は最後に回す
+      if (l === NO_VIEWPOINT) return 1;
+      if (r === NO_VIEWPOINT) return -1;
+      return l.localeCompare(r, 'ja');
+    }
+    return 0;
+  });
+}
+
+export type GroupHeading = { level: number; no: string; title: string };
+
+export type NumberedGroup = {
+  group: Group;
+  /** 観点のまとまりの番号（例 "4.1.2.1"）。prefix が無ければ空 */
+  no: string;
+  /** このまとまりの前に出す分類の見出し（変わったところだけ） */
+  headings: GroupHeading[];
+  /** 通し番号（アンカー用） */
+  index: number;
+};
+
+/**
+ * 章立てに番号を振る。
+ *
+ * 分類（機能 > 画面）は変わったところでだけ見出しを出し、
+ * 観点はその下で連番になる（4.1 機能 → 4.1.2 画面 → 4.1.2.1 観点）。
+ */
+export function numberGroups(groups: Group[], prefix?: string): NumberedGroup[] {
+  const counters: number[] = [];
+  let previous: string[] = [];
+  let lastKey: string | null = null;
+  let viewpointNo = 0;
+
+  return groups.map((group, index) => {
+    const headings: GroupHeading[] = [];
+    for (let i = 0; i < group.path.length; i++) {
+      if (previous[i] === group.path[i]) continue;
+      // ここから下の層は「変わった」ものとして数え直す
+      counters[i] = (counters[i] ?? 0) + 1;
+      counters.length = i + 1;
+      previous = previous.slice(0, i);
+      headings.push({
+        level: i + 1,
+        no: prefix ? [prefix, ...counters.slice(0, i + 1)].join('.') : '',
+        title: group.path[i]!,
+      });
+    }
+    previous = group.path;
+
+    // 観点は同じ分類の中で連番（並びは分類ごとにまとまっている）
+    const key = group.path.join('\u0000');
+    viewpointNo = key === lastKey ? viewpointNo + 1 : 1;
+    lastKey = key;
+
+    const no = prefix ? [prefix, ...counters.slice(0, group.path.length), viewpointNo].join('.') : '';
+    return { group, no, headings, index };
+  });
+}
+
+/** 観点ごとに行をまとめる（分類を無視した平らな形）。 */
+export function groupByViewpoint(matrix: Matrix): Array<{ viewpoint: string; rows: MatrixRow[] }> {
+  return groupCases(matrix).map(({ viewpoint, rows }) => ({ viewpoint, rows }));
 }
 
 /* ------------------------------------------------------------ 端末に出す */
@@ -165,9 +276,13 @@ export function renderMatrixText(matrix: Matrix): string {
     return `${t.passed}/${t.failed + t.timedOut}/${t.skipped}`;
   };
 
-  for (const { viewpoint, rows } of groupByViewpoint(matrix)) {
+  let shown = '';
+  for (const { path, viewpoint, rows } of groupCases(matrix)) {
     lines.push('');
-    lines.push(`■ ${viewpoint}`);
+    const head = path.join(' > ');
+    if (head && head !== shown) lines.push(`■ ${head}`);
+    shown = head;
+    lines.push(`${head ? '  ' : '■ '}観点: ${viewpoint}`);
     for (const row of rows) {
       lines.push(
         clip(row.title) +
@@ -280,14 +395,18 @@ ${renderMatrixTable(matrix.columns, matrix.rows, options)}
   }
 
   // 観点ごとに 1 枚。印刷すると観点ごとにページが変わる
-  const blocks = groupByViewpoint(matrix).map(({ viewpoint, rows }, i) => {
-    const no = options.numberPrefix ? `${options.numberPrefix}.${i + 1} ` : '';
+  const numbering = numberGroups(groupCases(matrix), options.numberPrefix);
+  const blocks = numbering.map(({ group, no, headings }, i) => {
     const jump = options.detailAnchor
       ? ` <a class="jump" href="#${options.detailAnchor(i)}">詳細へ</a>`
       : '';
-    return `<div class="matrix page">
-<h3>${no}観点: ${escapeHtml(viewpoint)} <span class="muted">（${rows.length} ケース）</span>${jump}</h3>
-${renderMatrixTable(matrix.columns, rows, options)}
+    const tag = (level: number) => `h${Math.min(6, level + 2)}`;
+    const vpTag = tag(group.path.length + 1);
+    return `${headings
+      .map((h) => `<${tag(h.level)}>${h.no} ${escapeHtml(h.title)}</${tag(h.level)}>`)
+      .join('\n')}<div class="matrix page">
+<${vpTag}>${no} 観点: ${escapeHtml(group.viewpoint)} <span class="muted">（${group.rows.length} ケース）</span>${jump}</${vpTag}>
+${renderMatrixTable(matrix.columns, group.rows, options)}
 </div>`;
   });
 

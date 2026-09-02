@@ -46,8 +46,8 @@ export const STATUS_WORDS: Array<{ word: string; playwright: string; meaning: st
 export const PAGE_FIELDS: PageField[] = [
   {
     name: 'お題',
-    meaning: 'どのケースを、どの対象（ロール / 環境）で流したか',
-    source: 'describe と test の名前、Playwright の project 名',
+    meaning: 'どのケースを、どの対象（ロール / 環境）で流したか。分類（機能 > 画面）も添える',
+    source: "describe と test の名前、project 名、details({ 分類: ['機能', '画面'] })",
   },
   {
     name: '前提',
@@ -133,7 +133,13 @@ export function formatPageSpec(): string {
   }
   lines.push('');
   lines.push(`最低限（lint が見る）: ${REQUIRED_FIELDS.join(' / ')}`);
-  lines.push('章立て: 観点（details({ 観点 })）→ マトリクス（ケース × ロール）→ ページ');
+  lines.push(
+    '章立て: 分類[0]（機能）→ 分類[1]（画面）→ 観点 → マトリクス（ケース × ロール）→ ページ',
+  );
+  lines.push(
+    "分類は details({ 分類: ['機能', '画面'] })。書かなければ describe の入れ子を上から使う" +
+      '（観点も宣言していなければ、一番内側の describe が観点になる）。',
+  );
   return lines.join('\n');
 }
 
@@ -153,6 +159,7 @@ export const MCP_INSTRUCTIONS = `FailureReport — Playwright の実行結果（
 - 「落ちたのはどれ」「なぜ落ちた」 → get_failures（落ちた手順・判定・エラー）
 - 「どんなテストがある」「この観点はカバーしているか」 → list_tests（実行せず、コードの宣言から答える）
 - 「ロールごとの結果」「どの組み合わせが未確認か」 → get_matrix（viewpoint で観点を絞れる。row / column で軸を変えられる）
+- 報告書の章立ては「分類（機能 > 画面）→ 観点 → ページ」。どこの話かを答えるときは分類から言う
 - 「あるケースの詳細」 → get_run（status で passed / failed / skipped に絞る）
 - 「実行の履歴」「前回との違い」 → list_runs → get_run
 - 「報告書の書き方が足りていないところ」 → list_gaps

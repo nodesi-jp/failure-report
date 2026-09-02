@@ -51,6 +51,7 @@ export async function note(testInfo: TestInfo, title: string, text: string): Pro
 
 /** 注記の種類。報告書はこの種類ごとに章立てする。 */
 export const ANNOTATION = {
+  classification: '分類',
   viewpoint: '観点',
   precondition: '前提',
   reference: '参照',
@@ -115,6 +116,15 @@ export function reference(testInfo: TestInfo, ...texts: string[]): void {
  * 実行中に足すときは viewpoint() / precondition() / issue() を使う。
  */
 export function details(spec: {
+  /**
+   * 報告書の章立て（機能 > 画面）。2 層まで。
+   *
+   *   分類: ['ファイル共有', '受信一覧']
+   *
+   * 書かなければ describe の入れ子を上から使う
+   * （`describe('ファイル共有', () => describe('受信一覧', ...))` と同じ意味になる）。
+   */
+  分類?: string | string[];
   観点?: string | string[];
   前提?: string | string[];
   参照?: string | string[];
@@ -131,6 +141,10 @@ export function details(spec: {
   tag?: string | string[];
 }): { annotation: Array<{ type: string; description: string }>; tag?: string | string[] } {
   const annotation: Array<{ type: string; description: string }> = [];
+  if (spec.分類) {
+    const path = (Array.isArray(spec.分類) ? spec.分類 : [spec.分類]).map((s) => s.trim()).filter(Boolean);
+    if (path.length) annotation.push({ type: '分類', description: path.join(' > ') });
+  }
   for (const type of ['観点', '前提', '参照', '要確認'] as const) {
     const value = spec[type];
     if (!value) continue;

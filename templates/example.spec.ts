@@ -3,6 +3,7 @@
  *
  * この 1 本を流すと、報告書のページ（マトリクスの 1 マス）の全欄が埋まる:
  *   お題 / 前提 / 内容 / OK と判断した根拠 / 結果 / 要確認 / 参照 / DB の状態 / スクリーンショット
+ * 章立ては 分類（機能 > 画面）→ 観点 → ページ。
  * もう 1 本は「ブロック」の正しい形（実行できない理由が付く）。
  *
  * 対象はこのファイルの中に持っている小さな ToDo 画面（page.setContent）。
@@ -44,10 +45,13 @@ const TODO_APP = `<!doctype html><meta charset="utf-8">
 const readTodos = (page: import('@playwright/test').Page) =>
   page.locator('#list li').evaluateAll((els) => els.map((el) => ({ title: el.firstChild?.textContent?.trim() })));
 
-// 観点と前提は describe の名前の隣に details で書く（実行しなくても --list で読める）
+// 分類・観点・前提は describe の名前の隣に details で書く（実行しなくても --list で読める）
 // わるい例: 観点を書かない → 報告書で「（観点の宣言なし）」の章に落ちる
 test.describe('ToDo の追加と削除', details({
-  観点: 'ToDo 管理: 追加したものが一覧に出て、削除すると消える',
+  // 報告書の章立て（機能 > 画面）。2 層まで。
+  // 書かなければ describe の入れ子がそのまま章立てになる
+  分類: ['ToDo', '一覧画面'],
+  観点: '追加したものが一覧に出て、削除すると消える',
   前提: '一覧に「牛乳を買う」「本を返す」の 2 件だけがある状態',
   参照: 'https://example.invalid/spec/todo（仕様書の置き場所）',
 }), () => {
