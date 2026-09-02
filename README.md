@@ -173,7 +173,7 @@ evidence/
 ├── latest → 2026-08-31_212000    最新へのリンク
 └── 2026-08-31_212000/            実行ごと。上書きしない
     ├── report.html               テスト報告書（1 ファイルで完結、画像埋め込み）
-    ├── run.json                  機械可読の実行記録（下記）
+    ├── run.json                  機械可読の実行記録（環境・結果・観点・手順・添付。中身は開けば分かる）
     ├── report/index.html         Playwright の HTML レポート（トレース閲覧はこちら）
     ├── shots/                    要所のスクリーンショット（連番＋日本語ラベル）
     └── artifacts/                トレース・動画・添付
@@ -258,42 +258,4 @@ export const test = base.extend<{ transferStats: void }>({
     await tracker.finish();
   }, { auto: true }],
 });
-```
-
-## run.json
-
-機械可読の実行記録。リリースに「この版はここまで確認済み」と添えられる。
-
-```jsonc
-{
-  "runId": "2026-08-31_212000",
-  "environment": { "name": "stg", "baseURL": "https://..." },
-  "startedAt": "...", "endedAt": "...", "durationMs": 331000,
-  "status": "passed",
-  "counts": { "passed": 43, "skipped": 62 },
-  "tool": { "playwright": "1.62.1", "workers": 5, "projects": ["public", "chromium"] },
-  "report": { "title": "...", "purpose": "...", "preconditions": ["..."] },
-  "transfer": { "upload": "898.18 KB", "download": "376.07 KB" },
-  "cases": [
-    {
-      "title": "ToDo の追加と削除 › 追加した ToDo が一覧に出て…",
-      "project": "chromium",
-      "status": "passed",
-      "durationMs": 45231,
-      "steps": [{ "title": "「掃除をする」を追加して、一覧に出ることを確かめる", "durationMs": 12000 }],
-      "annotations": ["観点: ToDo 管理: …", "前提: …"],
-      "attachments": [
-        { "name": "01 追加した直後の一覧", "contentType": "image/png", "path": "shots/…png" },
-        { "name": "状態 ToDo 一覧 前", "contentType": "application/json", "body": "[…]" }
-      ]
-    }
-  ]
-}
-```
-
-## 開発
-
-```bash
-npm run build       # dist/ を作る（tsc）
-npm run typecheck
 ```
