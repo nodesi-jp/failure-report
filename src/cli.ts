@@ -641,7 +641,12 @@ function writeExample(args: Args) {
   if (args.example !== true) return;
   const body = exampleSpec();
   if (!body) return;
-  const dir = fs.existsSync(path.join(process.cwd(), 'tests')) ? 'tests' : 'e2e';
+  // 置き場所は playwright.config の testDir に合わせる（無ければ tests/）
+  const config = ['playwright.config.ts', 'playwright.config.mts', 'playwright.config.js']
+    .map((f) => path.join(process.cwd(), f))
+    .find((f) => fs.existsSync(f));
+  const m = config ? /testDir\s*:\s*['"]\.?\/?([^'"]+)['"]/.exec(fs.readFileSync(config, 'utf-8')) : null;
+  const dir = m?.[1] ?? 'tests';
   const target = path.join(process.cwd(), dir, 'failure-report.example.spec.ts');
   if (fs.existsSync(target)) {
     return void console.log(`お手本は既にあります: ${path.relative(process.cwd(), target)}（最新は npx failure-report example）`);
