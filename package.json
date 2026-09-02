@@ -52,9 +52,10 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/sync-readme.mjs",
     "prepare": "npm run build",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "readme": "node scripts/sync-readme.mjs"
   },
   "peerDependencies": {
     "@playwright/test": ">=1.40.0"

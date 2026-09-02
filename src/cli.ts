@@ -62,16 +62,15 @@ failure-report — Playwright の実行から Failure Report（テスト報告�
   npx failure-report <コマンド> [オプション]
 
 コマンド
-  init [--write] [--claude] [--example]
-                                 このプロジェクトに導入する（設定への追記を表示、--write で書き込む。
-                                 --claude で CLAUDE.md に書き方の決めごとを足す。何度流しても
-                                 重複せず、節が最新の文面に置き換わる。
-                                 --example でお手本 spec を tests/ に写す）
+  init [--write] [--claude] [--example] [--mcp]
+                                 このプロジェクトに導入する（設定への追記を表示、--write で書き込む）
+                                 --claude   CLAUDE.md に書き方の決めごとを足す（何度流しても増えない）
+                                 --example  お手本 spec を testDir に写す
+                                 --mcp      .mcp.json に MCP サーバを登録する
   list [-n <件数>]                実行の一覧を表示する
   serve [--port 4321] [--host]   ブラウザで見る（--host 0.0.0.0 で LAN のチームにも見せられる）
-  report [<実行ID>] [--single]    Failure Report を作る（観点ごとに別ページ。--single で 1 ファイル）
-                                 中身は観点・前提・マトリクス・
-                                 手順・スクショ・操作前後の状態、印刷して PDF にもできる）
+  report [<実行ID>] [--single]    Failure Report を作る（観点ごとに別ページ。--single で 1 ファイル、
+                                 印刷して PDF にもできる）
                                  軽くする: --max-mb 8 / --max-images 4 / --no-images
                                  画像の枠は失敗したケースから先に使う
   matrix [<実行ID>] [--html]      マトリクスを出す（既定は観点ごとにケース × ロール）
@@ -556,6 +555,7 @@ function cmdInit(args: Args) {
     console.log(`${config} は設定済みです。`);
     writeClaudeSection(args);
     writeExample(args);
+    writeMcpConfig(args);
     return void console.log(`\n${nextSteps()}`);
   }
 
@@ -631,6 +631,7 @@ function cmdInit(args: Args) {
   console.log(`${config} を更新しました（元は ${config}.bak）`);
   writeClaudeSection(args);
   writeExample(args);
+  writeMcpConfig(args);
   console.log(`\n${nextSteps()}`);
 }
 
@@ -654,7 +655,27 @@ function writeClaudeSection(args: Args) {
   );
 }
 
-/** お手本 spec を tests/ に写す。既にあれば触らない（手で育てているかもしれない）。 */
+/** .mcp.json に MCP サーバを登録する。他のサーバはそのまま残す。 */
+function writeMcpConfig(args: Args) {
+  if (args.mcp !== true) return;
+  const target = path.join(process.cwd(), '.mcp.json');
+  let current: { mcpServers?: Record<string, unknown> } = {};
+  if (fs.existsSync(target)) {
+    try {
+      current = JSON.parse(fs.readFileSync(target, 'utf-8'));
+    } catch {
+      return void console.log(`.mcp.json が読めないので触りません: ${target}`);
+    }
+  }
+  const servers = { ...(current.mcpServers ?? {}) };
+  const entry = { command: 'npx', args: ['failure-report', 'mcp'] };
+  const already = JSON.stringify(servers['failure-report']) === JSON.stringify(entry);
+  servers['failure-report'] = entry;
+  fs.writeFileSync(target, JSON.stringify({ ...current, mcpServers: servers }, null, 2) + '\n');
+  console.log(already ? '.mcp.json は登録済みです' : '.mcp.json に failure-report を登録しました');
+}
+
+/** お手本 spec を testDir に写す。既にあれば触らない（手で育てているかもしれない）。 */
 function writeExample(args: Args) {
   if (args.example !== true) return;
   const body = exampleSpec();
