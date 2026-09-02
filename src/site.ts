@@ -126,7 +126,12 @@ export const STYLE = `
  *{box-sizing:border-box}
  body{font-family:"Hiragino Sans",system-ui,sans-serif;margin:0;background:var(--bg);color:var(--fg);line-height:1.7}
  .wrap{max-width:960px;margin:40px auto;padding:0 20px}
- h1{font-size:22px;margin:0 0 4px} h2{font-size:16px;margin:32px 0 8px}
+ h1{font-size:22px;margin:0 0 4px}
+ h2{font-size:18px;margin:36px 0 10px}
+ h3{font-size:16px;margin:28px 0 6px}
+ h4{font-size:15px;margin:22px 0 6px}
+ h5{font-size:14px;margin:18px 0 6px}
+ h6{font-size:13px;margin:14px 0 4px}
  .lede{color:var(--muted);margin:0 0 24px;font-size:14px}
  table{width:100%;border-collapse:collapse;font-size:14px}
  th{text-align:left;font-size:11px;letter-spacing:.08em;color:var(--muted);font-weight:500;padding-bottom:8px;border-bottom:1px solid var(--rule)}
@@ -147,12 +152,12 @@ export const STYLE = `
  .shots input:checked + label img{cursor:zoom-out}
  .shots figure:has(input:checked){width:100%}
  .shots figcaption{font-size:11px;color:var(--muted);margin-top:4px}
- /* マトリクスは本文より広く使う（列が多いので） */
- .matrix{position:relative;left:50%;transform:translateX(-50%);width:min(94vw,1600px);overflow-x:auto}
- /* 表は中身の幅で組む。見出しが縦に潰れないよう、値の列は折り返さない */
- .matrix table{font-size:13px;width:auto;min-width:100%}
+ /* マトリクスは本文の幅に収める。列が多くて溢れるときだけ横スクロール */
+ .matrix{overflow-x:auto}
+ /* 表は中身の幅で組む。ケース名は折り返し、値の列は折り返さない */
+ .matrix table{font-size:13px;width:auto;min-width:0;max-width:100%}
  .matrix th,.matrix td{border-left:1px solid var(--line);padding:7px 14px}
- .matrix th:first-child,.matrix td:first-child{border-left:0;padding-left:0;white-space:normal}
+ .matrix th:first-child,.matrix td:first-child{border-left:0;padding-left:0;white-space:normal;max-width:26em;overflow-wrap:anywhere}
  .matrix th.n,.matrix td.cell{white-space:nowrap;min-width:6.5em;text-align:center}
  .matrix th.n{vertical-align:bottom}
  .matrix tbody tr:nth-child(even) td,.matrix tr:nth-child(even) td{background:color-mix(in srgb,var(--card) 60%,transparent)}
@@ -162,7 +167,7 @@ export const STYLE = `
  .matrix td.cell a{text-decoration:none}
  .matrix tr.foot td{border-top:1px solid var(--rule);font-size:12px;background:none}
  .matrix td.failed,.matrix td.timedOut{background:color-mix(in srgb,var(--ng) 14%,transparent)}
- .matrix h3{margin:28px 0 6px} .matrix h3 .jump{font-size:12px;font-weight:400;margin-left:8px}
+ .matrix .jump{font-size:12px;font-weight:400;margin-left:8px}
  .matrix .where{font-size:11px;color:var(--muted);margin:0 0 6px}
  details{font-size:13px;margin-top:8px} summary{cursor:pointer;color:var(--muted)}
  pre{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:10px;overflow:auto;font-size:12px}

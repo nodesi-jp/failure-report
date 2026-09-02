@@ -986,7 +986,7 @@ const PRINT_STYLE = `
  .kv th{width:140px;text-align:left;border-bottom:0;border-top:1px solid var(--line);padding:9px 12px 9px 0;font-size:12px;color:var(--muted);vertical-align:top}
  ul.plain{margin:0;padding-left:18px}
  .chips{margin:0 0 6px} .chip{display:inline-block;font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:1px 9px;margin:0 6px 4px 0}
- .case h4{font-size:14px;margin:0 0 6px;font-weight:600}
+ .case h4,.case h5,.case h6{font-size:14px;margin:0 0 6px;font-weight:600}
  .issues{border:1px solid var(--ng);border-radius:8px;padding:14px 18px;margin:0 0 24px}
  .issues li{margin-bottom:6px}
  .state{margin:10px 0} .state h4{font-size:12px;color:var(--muted);margin:0 0 4px;font-weight:500}
