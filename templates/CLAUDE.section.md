@@ -9,19 +9,20 @@
 ```ts
 import { details, shot, step, note, issue, aroundState } from '@nodesi/failure-report';
 
-test.describe('プロジェクトの作成と削除', details({
-  観点: 'プロジェクト管理: 作成したものが一覧に出て、削除すると消える',
-  前提: 'e2e- で始まるプロジェクトが残っていない状態',
+test.describe('ToDo の追加と削除', details({
+  観点: 'ToDo 管理: 追加したものが一覧に出て、削除すると消える',
+  前提: '一覧に 2 件だけがある状態',
 }), () => {
 
-test('作成したプロジェクトが一覧に出て、削除すると消える', async ({ page }, testInfo) => {
-  await aroundState(testInfo, 'プロジェクト一覧', () => listProjects(page), () =>
-    step('プロジェクトを新規作成して、一覧に出ることを確かめる', async () => {
-      await projects.createProject(name);
-      await shot(page, testInfo, '作成直後の一覧');
-      await expect(...).toBeVisible();
+test('追加した ToDo が一覧に出て、削除すると消える', async ({ page }, testInfo) => {
+  await aroundState(testInfo, 'ToDo 一覧', () => readTodos(page), () =>
+    step('「掃除をする」を追加して、一覧に 3 件目として出ることを確かめる', async () => {
+      await page.getByRole('button', { name: '追加' }).click();
+      await shot(page, testInfo, '追加した直後の一覧');
+      await expect(page.getByText('掃除をする'), '追加した ToDo が一覧に出ること').toBeVisible();
     }),
   );
+});
 });
 ```
 
@@ -31,7 +32,7 @@ test('作成したプロジェクトが一覧に出て、削除すると消え�
 - `issue(testInfo, '...')` — 通っているが人に見てほしいこと（間欠的に落ちる等）。報告書の先頭に出る。
 - `step` — 手順。**操作と、それで何を確かめたかを 1 文で**。「クリック」「アサート」は書かない。
   - よい: `ファイルを2つアップロードして、一覧に両方出ることを確かめる`
-  - わるい: `click upload button`
+  - わるい: `click upload button` / `assert visible` / `step 1`
 - `shot` — 「何をした直後の画面か」が分かるラベルで撮る。連番は自動。
 - `note` — 数値・チェックサム・API 応答。
 - `aroundState` — 操作の前後の状態（DB / API から取った一覧）。報告書に差分表が出る。

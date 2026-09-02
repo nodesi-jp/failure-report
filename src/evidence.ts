@@ -170,8 +170,8 @@ export async function recordState(
 /**
  * 「操作の前後で状態を撮る」をひとまとめにする。
  *
- *   await aroundState(testInfo, 'プロジェクト一覧', () => api.listProjects(), async () => {
- *     await projects.create(name);   // ← この操作の前後が記録される
+ *   await aroundState(testInfo, 'ToDo 一覧', () => api.listTodos(), async () => {
+ *     await addTodo(name);   // ← この操作の前後が記録される
  *   });
  */
 export async function aroundState<T>(

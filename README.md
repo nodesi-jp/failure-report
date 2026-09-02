@@ -75,7 +75,7 @@ export default defineConfig({
     ['@nodesi/failure-report/reporter', {
       share: true,                                  // 実行のたびに report.html を作る
       report: {
-        title: '自動テスト報告書',
+        title: 'Failure Report',
         purpose: '何のためのテストか',
         scope: ['対象機能'],
         preconditions: ['環境・データ・アカウントの前提'],
@@ -88,27 +88,38 @@ export default defineConfig({
 
 ## テストの書き方
 
-観点と前提は **Playwright 標準のアノテーション枠**（`details`）に書く。describe に書けば中の全ケースに付く。
+**動くお手本が付いている。** ページの全欄が埋まる 1 本と、ブロック（理由付きの `test.skip`）の
+正しい形が入っている。ネットワークも認証も要らないので、そのまま流せる。
+
+```bash
+npx failure-report init --example     # tests/ に写す（testDir を見る）
+npx failure-report example            # 端末に出すだけ
+npx playwright test failure-report.example
+```
+
+骨格はこれだけ。観点と前提は **Playwright 標準のアノテーション枠**（`details`）に書く。
+describe に書けば中の全ケースに付く。
 
 ```ts
 import { details, step, shot, note, issue, aroundState } from '@nodesi/failure-report';
 
-test.describe('プロジェクトの作成と削除', details({
-  観点: 'プロジェクト管理: 作成したものが一覧に出て、削除すると消える',
-  前提: 'e2e- で始まるプロジェクトが残っていない状態',
+test.describe('ToDo の追加と削除', details({
+  観点: 'ToDo 管理: 追加したものが一覧に出て、削除すると消える',
+  前提: '一覧に 2 件だけがある状態',
 }), () => {
 
-test('作成したプロジェクトが一覧に出て、削除すると消える', async ({ page }, testInfo) => {
+test('追加した ToDo が一覧に出て、削除すると消える', async ({ page }, testInfo) => {
 
-  await aroundState(testInfo, 'プロジェクト一覧', () => listProjects(page), () =>
-    step('プロジェクトを新規作成して、一覧に出ることを確かめる', async () => {
-      await projects.createProject(name);
-      await shot(page, testInfo, '作成直後の一覧');
-      await expect(page.getByRole('link', { name })).toBeVisible();
+  await aroundState(testInfo, 'ToDo 一覧', () => readTodos(page), () =>
+    step('「掃除をする」を追加して、一覧に 3 件目として出ることを確かめる', async () => {
+      await page.getByRole('button', { name: '追加' }).click();
+      await shot(page, testInfo, '追加した直後の一覧');
+      await expect(page.getByText('掃除をする'), '追加した ToDo が一覧に出ること').toBeVisible();
     }),
   );
 
-  await note(testInfo, '照合結果', `find+cksum: ${a} / ${b}`);
+  await note(testInfo, '最終的な一覧', JSON.stringify(await readTodos(page)));
+  issue(testInfo, '追加が一覧に反映されるまで 300ms かかる。仕様確認が要る');
 });
 });
 ```
@@ -119,13 +130,10 @@ test('作成したプロジェクトが一覧に出て、削除すると消え�
 $ npx failure-report lint
 報告書の記述が足りないケース: 3 / 168 件
 
-roles/file-move.spec.ts
-  ファイルの移動 › 移動してもファイルの中身は変わらない
+todo/list.spec.ts
+  ToDo の並び替え › 期限の近い順に並ぶ
     足りない: 手順
 ```
-
-**状態の読み取りは画面を開き直してから。** 一覧は削除直後に楽観的に書き換わることがあり、
-そのまま読むと「前と後が同じ」になる。
 
 | 関数 | 報告書のどこに出るか | 書き方 |
 |---|---|---|
@@ -149,8 +157,8 @@ roles/file-move.spec.ts
 「DB を直接見る口」が無くても、API や画面から取れる一覧を前後で撮れば差分は出せる。
 
 ```ts
-await aroundState(testInfo, 'プロジェクト一覧', () => listProjects(page), async () => {
-  await projects.createProject(name);   // ← この操作の前後が記録される
+await aroundState(testInfo, 'ToDo 一覧', () => readTodos(page), async () => {
+  await addTodo('掃除をする');   // ← この操作の前後が記録される
 });
 ```
 
@@ -179,14 +187,14 @@ npx failure-report <コマンド>
 
 | コマンド | すること |
 |---|---|
-| `init [--write] [--claude]` | 導入。設定と CLAUDE.md に追記 |
+| `init [--write] [--claude] [--example]` | 導入。設定・CLAUDE.md への追記と、お手本 spec の写し。何度流してもよい |
 | `list [-n 20]` | 実行履歴を表で表示 |
 | `matrix [<実行ID>] [--html] [--all-envs]` | 観点 × ロール（環境）のマトリクス。`--all-envs` は環境ごとの最新を並べる |
 | `catalog` | どんなテストがあり何を確かめることになっているかを、実行せずに観点ごとに並べる |
 | `page` | ページ（マトリクスの 1 マス）に載せる項目と、結果の言葉（OK / NG / ブロック / 対象外）の定義 |
 | `practices` | テストを書くときの決めごと（`init --claude` が CLAUDE.md に足す文）を出す |
-| `example` | お手本 spec を出す（報告書の全欄が埋まる 1 本とブロックの形）。`init --example` で `tests/` に写せる |
-| `lint [<実行ID>] [--strict]` | 観点・前提・手順・スクショが足りないケースを挙げる（`--strict` で CI を落とせる） |
+| `example` | お手本 spec を出す（報告書の全欄が埋まる 1 本とブロックの形）。`init --example` で testDir に写せる |
+| `lint [<実行ID>] [--strict]` | 観点・前提・手順・判定・スクショが足りないケースと、続けてブロックされたままのテストを挙げる（`--strict` で CI を落とせる） |
 | `report [<実行ID>] [--out f] [--no-images]` | 報告書 `report.html` を作る |
 | `serve [--port 4321] [--host 0.0.0.0] [--open]` | ブラウザで見る。`--host 0.0.0.0` で同じネットワークのチームにも |
 | `publish --to <置き場所> [--runs all] [--light]` | 共有できる場所へ静的サイトとして置く |
@@ -226,11 +234,11 @@ claude mcp add failure-report -- npx failure-report mcp
 | ツール | 返すもの |
 |---|---|
 | `list_runs` | 実行履歴（環境・結果・所要・転送量） |
-| `get_run` | 実行 1 件の全ケース（手順・結果・スクショの場所） |
+| `get_run` | 実行 1 件の全ケースを、報告書のページと同じ項目の順で返す |
 | `get_matrix` | 観点 × ロールのマトリクス（`allEnvironments` で環境も） |
-| `get_failures` | 失敗したケースだけ（落ちた手順とエラー） |
+| `get_failures` | NG のケースだけ（落ちた手順・成立しなかった判定・エラー） |
 | `list_tests` | **実行せずに**「どんなテストがあり何を確かめるか」（観点・前提）を返す |
-| `list_gaps` | 記述（観点・前提・手順・スクショ）が足りないケース |
+| `list_gaps` | 記述が足りないケースと、続けてブロックされたままのテスト |
 | `describe_page` | ページ（1 マス）に載せる項目の一覧と意味、結果の言葉の定義 |
 | `get_example` | お手本 spec を丸ごと返す。`instructions` が「書く前にこれを読む」と伝える |
 | `build_share` | Failure Report を作ってパスを返す |
@@ -250,10 +258,6 @@ CLAUDE.md に書かなくても次が伝わる。
 
 テストの書き方（`details` / `step` / `shot` …）は `init --claude` が CLAUDE.md に足す節で伝える（実行前のコードを書く場面は MCP ではなく CLAUDE.md の担当）。
 
-「昨日の実行で落ちたのはどれ」「stg と prod で結果が違うケースは」に加え、
-`list_tests` は**テストを流さずに**「この観点のテストはあるか」「何をカバーしているか」に答える
-（`details` で宣言していればカタログとして読めるため）。
-
 ## 設定
 
 | 環境変数 | 既定 | 説明 |
@@ -262,6 +266,7 @@ CLAUDE.md に書かなくても次が伝わる。
 | `EVIDENCE_RUN_ID` | 実行時刻 | 実行 ID。CI ではビルド番号を入れてもよい |
 | `EVIDENCE_ENV_NAME` | baseURL のホスト名 | 一覧に出す環境名（stg / prod など） |
 | `EVIDENCE_SHARE` | `0` | `1` で実行のたびに報告書も作る（reporter の `share` でも指定できる） |
+| `FAILURE_REPORT_SESSION` | その実行だけ | 「全部流す → 落ちたものを流し直す」を 1 冊にまとめる名前。同じ値の実行がケースごとに 1 回目・2 回目…として並ぶ |
 
 reporter のオプション: `title` / `share` / `exclude`（報告書に載せないプロジェクト、既定 `['setup']`）/
 `report.{title,purpose,scope,preconditions,author}`。
@@ -289,20 +294,20 @@ export const test = base.extend<{ transferStats: void }>({
   "startedAt": "...", "endedAt": "...", "durationMs": 331000,
   "status": "passed",
   "counts": { "passed": 43, "skipped": 62 },
-  "tool": { "playwright": "1.62.1", "workers": 5, "projects": ["public", "orgAdmin"] },
+  "tool": { "playwright": "1.62.1", "workers": 5, "projects": ["public", "chromium"] },
   "report": { "title": "...", "purpose": "...", "preconditions": ["..."] },
   "transfer": { "upload": "898.18 KB", "download": "376.07 KB" },
   "cases": [
     {
-      "title": "プロジェクトの作成と削除 › フォルダをアップロードして…",
-      "project": "orgAdmin",
+      "title": "ToDo の追加と削除 › 追加した ToDo が一覧に出て…",
+      "project": "chromium",
       "status": "passed",
       "durationMs": 45231,
-      "steps": [{ "title": "プロジェクトを作って、フォルダごとドロップする", "durationMs": 12000 }],
-      "annotations": ["観点: プロジェクト管理: …", "前提: …"],
+      "steps": [{ "title": "「掃除をする」を追加して、一覧に出ることを確かめる", "durationMs": 12000 }],
+      "annotations": ["観点: ToDo 管理: …", "前提: …"],
       "attachments": [
-        { "name": "01 アップロードが終わったところ", "contentType": "image/png", "path": "shots/…png" },
-        { "name": "状態 プロジェクト一覧 前", "contentType": "application/json", "body": "[…]" }
+        { "name": "01 追加した直後の一覧", "contentType": "image/png", "path": "shots/…png" },
+        { "name": "状態 ToDo 一覧 前", "contentType": "application/json", "body": "[…]" }
       ]
     }
   ]
